@@ -18,7 +18,7 @@ for date in tqdm(dateList[:]):
         df = df_ori[df_ori['code'] == code]
         code_nums_each.append(len(df))
         new_file = ParquetFile()
-        new_file.filename = os.path.join(stock_path, "./data/" + date + '/train_data_' + str(code) + '.parquet')
+        new_file.filename = os.path.join(stock_path, "./data/" + date + '/train_data_' + str(int(code)) + '.parquet')
         new_file.data = df
         new_file.dump()
     assert sum(code_nums_each) == len(df_ori)
