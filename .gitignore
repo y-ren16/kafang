@@ -6,3 +6,7 @@
 /*/*/__pycache__
 logs
 *.parquet
+imgs/
+README.md
+LICENSE
+docs/
