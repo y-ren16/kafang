@@ -119,7 +119,7 @@ def run_game(g, env_name, multi_part_agent_ids, actions_spaces, policy_list, ren
                  "map_size": g.map_size if hasattr(g, "map_size") else None}
 
     steps = []
-    all_observes = g.all_observes
+    all_observes = g.reset()
     while not g.is_terminal():
         step = "step%d" % g.step_cnt
         if g.step_cnt % 10 == 0:
