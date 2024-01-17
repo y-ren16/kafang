@@ -187,6 +187,7 @@ class MarketmakingTrainer(BasicActirCriticTrainer):
         logger_writer = SummaryWriter(os.path.join(save_dir, 'log'))
 
         all_observes = self.env.reset()
+        self.test_env.reset()
         state = self.extract_state(all_observes)
 
         for i in range(int(train_step) + 1):
@@ -205,8 +206,8 @@ class MarketmakingTrainer(BasicActirCriticTrainer):
             logger.update(self.critic_train_step(batch_size))
             self.soft_update_target_critic()
             logger.update(self.actor_train_step(batch_size))
-            if i % 10000 == 0:
-                logger['episode_reward_mean'], logger['episode_reward_std'] = self.RL_test(test_num=5)
+            if i % 10 == 0:
+                logger['test_reward_mean'] = self.RL_test(test_length=1000)
 
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
@@ -217,27 +218,23 @@ class MarketmakingTrainer(BasicActirCriticTrainer):
                     info += ' | %s: %.3f' % (key, logger[key])
                 print(info)
 
-    def RL_test(self, test_num=10):
-        episode_rewards = []
-        for _ in range(test_num):
-            all_observes = self.test_env.reset()
+    def RL_test(self, test_length=1000):
+        reward_sum = 0
+        for _ in range(test_length):
+            all_observes = self.test_env.all_observes
             state = self.extract_state(all_observes)
-            episode_reward = 0
-            while not self.test_env.done:
-                state = torch.FloatTensor(state).to(self.device)
-                action = self.actor.get_action(state)
-                decoupled_action = self.decouple_action(action=action,
-                                                        observation=all_observes[0])
-                all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
-                next_state = self.extract_state(all_observes)
-                episode_reward += reward
-                state = next_state
+            # while not self.test_env.done:
+            state = torch.FloatTensor(state).to(self.device)
+            action = self.actor.get_action(state)
+            decoupled_action = self.decouple_action(action=action,
+                                                    observation=all_observes[0])
+            all_observes, reward, done, info_before, info_after = self.test_env.step([decoupled_action])
+            reward_sum += reward
+            if self.test_env.done:
+                self.test_env.reset()
+            # state = next_state
 
-            episode_rewards.append(episode_reward)
-        episode_reward = np.array(episode_rewards)
-        episode_reward_std = episode_reward.std()
-        episode_reward = episode_reward.mean()
-        return episode_reward, episode_reward_std
+        return reward_sum
 
     def save_RL_part(self, save_path):
         torch.save({'actor': self.actor.state_dict(),

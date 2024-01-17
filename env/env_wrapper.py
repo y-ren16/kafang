@@ -1,23 +1,9 @@
-import json
-import os
 from abc import ABC
-from env import kafang_stock
-import sys
-from pathlib import Path
-from .stock_raw.backtest.utils import ParquetFile
-from .stock_raw.mock_market_common.mock_market_data_cython import MockMarketDataCython
-from .stock_raw.envs.stock_base_env_cython import StockBaseEnvCython
+from env.kafang_stock import *
 import numpy as np
 
-CURRENT_PATH = str(Path(__file__).resolve().parent.parent)
-taxing_path = os.path.join(CURRENT_PATH)
-sys.path.append(taxing_path)
-print(CURRENT_PATH)
-stock_path = os.path.join(CURRENT_PATH, 'env/stock_raw')
-sys.path.append(stock_path)
 
-
-class env_with_reward(kafang_stock.KaFangStock):
+class env_with_reward(KaFangStock):
     def __init__(self, conf, seed=None, dataList=None):
         super(env_with_reward, self).__init__(conf, seed, dataList)
         self.conf = conf
