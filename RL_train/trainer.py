@@ -206,8 +206,8 @@ class MarketmakingTrainer(BasicActirCriticTrainer):
             logger.update(self.critic_train_step(batch_size))
             self.soft_update_target_critic()
             logger.update(self.actor_train_step(batch_size))
-            if i % 10 == 0:
-                logger['test_reward_mean'] = self.RL_test(test_length=1000)
+            if i % 10000 == 0:
+                logger['test_reward_mean'] = self.RL_test(test_length=10000)
 
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
