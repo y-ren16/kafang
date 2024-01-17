@@ -26,35 +26,27 @@ from .simulators.game import Game
 
 
 class KaFangStock(Game):
-    def __init__(self, conf, seed=None):
+    def __init__(self, conf, seed=None, dataList=None):
         super(KaFangStock, self).__init__(conf['n_player'], conf['is_obs_continuous'], conf['is_act_continuous'],
                                                conf['game_name'], conf['agent_nums'], conf['obs_type'])
         self.seed = seed
         self.set_seed()
-        file = ParquetFile()
-        self.env_core_list = []
 
-        signal_file_original_rootpath = os.path.join(stock_path, 'data')
-        self.dateList = [name for name in os.listdir(signal_file_original_rootpath) if
-                    os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
-        self.dateList.sort()
-        for date in self.dateList[-4:]:
-            file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
-            file.load()
-            df = file.data
-            code_list = []
-            for item in df['code'].unique():
-                code_list.append(float(item))
-            df = np.array(df)
-            mock_market_data = MockMarketDataCython(df)
-            env = StockBaseEnvCython(date, code_list, mock_market_data, limit_of_netpos=300)
+        self.signal_file_original_rootpath = os.path.join(stock_path, 'data')
 
-            self.env_core_list.append(env)
+        if dataList is None:
+            self.dateList = [name for name in os.listdir(self.signal_file_original_rootpath) if
+                        os.path.isdir(os.path.join(self.signal_file_original_rootpath, name))]
+            self.dateList.sort()
+        else:
+            self.dateList = dataList
 
         self.init_info = ''
         self.done = False
         self.step_cnt = 0
         self.won = {}
+        self.env_core = None
+        self.metric_list = None
         # self.reset()
 
         self.backtest_mode = 'twoSides'
@@ -85,18 +77,44 @@ class KaFangStock(Game):
         self.step_cnt = 0
         self.total_r = 0
         self.current_game = 0
-        self.total_game = len(self.env_core_list)
-
-        obs, done, info = self.env_core_list[self.current_game].reset()
-        self.all_observes = [{"observation": obs, "new_game": True}]
+        self.total_game = len(self.dateList)
+        self.metric_list = []
+        self.reset_env_core()
         return self.all_observes
 
     def reset_game(self):
+        """
+        切换到下一天的数据
+        :return:
+        """
+        env_metric = self.env_core.get_backtest_metric()
+        env_metric_dataframe = pd.DataFrame(env_metric, index=['date'])
+
+        self.metric_list.append(env_metric_dataframe)
         self.current_game += 1
-        obs, done, info = self.env_core_list[self.current_game].reset()
-        self.all_observes = [{"observation": obs, "new_game": True}]
+        self.reset_env_core()
         return self.all_observes
 
+    def reset_env_core(self):
+        """
+        将初始化env_core，env_core的数据为第self.dateList[self.current_game]天的数据
+        :return:
+        """
+        date = self.dateList[self.current_game]
+        file = ParquetFile()
+        file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
+        file.load()
+        df = file.data
+        code_list = []
+        for item in df['code'].unique():
+            code_list.append(float(item))
+        df = np.array(df)
+        mock_market_data = MockMarketDataCython(df)
+        self.env_core = StockBaseEnvCython(date, code_list, mock_market_data, limit_of_netpos=300)
+
+        obs, done, info = self.env_core.reset()
+        self.all_observes = [{"observation": obs, "new_game": True}]
+        return
 
     def is_valid_action(self, joint_action):
         if len(joint_action) != self.n_player:          #check number of player
@@ -162,7 +180,7 @@ class KaFangStock(Game):
         info_before = None
 
         try:
-            obs,done,info = self.env_core_list[self.current_game].step(decoded_order)
+            obs,done,info = self.env_core.step(decoded_order)
         except ValueError as v:
             print(f'Current game terminate early due to error {v}')
             done = True
@@ -173,7 +191,7 @@ class KaFangStock(Game):
         self.step_cnt += 1
 
         if done == 2:
-            obs, done, info = self.env_core_list[self.current_game].reset()
+            obs, done, info = self.env_core.reset()
             self.all_observes = [{"observation":obs, "new_game": False}]
         elif done and (self.current_game<self.total_game-1):
             obs = self.reset_game()
@@ -202,14 +220,14 @@ class KaFangStock(Game):
         return '-1'
 
     def _load_backtest_data(self):
-        metric_list = []
-        for env in self.env_core_list:
-            env_metric = env.get_backtest_metric()
-            env_metric_dataframe = pd.DataFrame(env_metric, index=['date'])
+        env_metric = self.env_core.get_backtest_metric()
+        env_metric_dataframe = pd.DataFrame(env_metric, index=['date'])
 
-            metric_list.append(env_metric_dataframe)
+        self.metric_list.append(env_metric_dataframe)
 
-        self.backtest_metric = pd.concat([metric for metric in metric_list])
+        assert len(self.metric_list) == self.total_game
+
+        self.backtest_metric = pd.concat([metric for metric in self.metric_list])
 
     def compute_final_stats(self):
         df = self.backtest_metric        #backtest_metric_data
