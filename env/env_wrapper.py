@@ -1,44 +1,50 @@
 import json
 import os
 from abc import ABC
-
 from env import kafang_stock
+import sys
+from pathlib import Path
+from .stock_raw.backtest.utils import ParquetFile
+from .stock_raw.mock_market_common.mock_market_data_cython import MockMarketDataCython
+from .stock_raw.envs.stock_base_env_cython import StockBaseEnvCython
+import numpy as np
+
+CURRENT_PATH = str(Path(__file__).resolve().parent.parent)
+taxing_path = os.path.join(CURRENT_PATH)
+sys.path.append(taxing_path)
+print(CURRENT_PATH)
+stock_path = os.path.join(CURRENT_PATH, 'env/stock_raw')
+sys.path.append(stock_path)
 
 
 class env_with_reward(kafang_stock.KaFangStock):
-    def __init__(self, conf, seed=None):
-        super(env_with_reward, self).__init__(conf, seed)
+    def __init__(self, conf, seed=None, dataList=None):
+        super(env_with_reward, self).__init__(conf, seed, dataList)
         self.conf = conf
         self.seed = seed
+        self.info_his = []
 
-    def reset(self):
+    def reset_env_core(self):
         """
-        整体reset
+        将初始化env_core，env_core的数据为第self.dateList[self.current_game]天的数据，与基类KaFangStock的reset_env_core相比，增加了保存初始info
         :return:
         """
-        super(env_with_reward, self).__init__(self.conf, self.seed)
+        date = self.dateList[self.current_game]
+        file = ParquetFile()
+        file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
+        file.load()
+        df = file.data
+        code_list = []
+        for item in df['code'].unique():
+            code_list.append(float(item))
+        df = np.array(df)
+        mock_market_data = MockMarketDataCython(df)
+        self.env_core = StockBaseEnvCython(date, code_list, mock_market_data, limit_of_netpos=300)
 
-        self.init_info = None
-        self.step_cnt = 0
-        self.total_r = 0
-        self.current_game = 0
-        self.total_game = len(self.env_core_list)
-
-        obs, done, info = self.env_core_list[self.current_game].reset()
+        obs, done, info = self.env_core.reset()
         self.all_observes = [{"observation": obs, "new_game": True}]
         self.info_his = [info]
-        return self.all_observes
-
-    def reset_game(self):
-        """
-        reset到下一天的数据
-        :return:
-        """
-        self.current_game += 1
-        obs, done, info = self.env_core_list[self.current_game].reset()
-        self.all_observes = [{"observation": obs, "new_game": True}]
-        self.info_his = [info]
-        return self.all_observes
+        return
 
     def step(self, action):
         """
@@ -54,7 +60,7 @@ class env_with_reward(kafang_stock.KaFangStock):
         # price = self.all_observes[0]['bp0']-0.1
 
         try:
-            obs, done, info = self.env_core_list[self.current_game].step(decoded_order)
+            obs, done, info = self.env_core.step(decoded_order)
 
         except ValueError as v:
             print(f'Current game terminate early due to error {v}')
@@ -69,7 +75,7 @@ class env_with_reward(kafang_stock.KaFangStock):
         reward = self.compute_reward()
 
         if done == 2:
-            obs, done, info = self.env_core_list[self.current_game].reset()  # reset到下一只股票
+            obs, done, info = self.env_core.reset()  # reset到下一只股票
             self.info_his = [info]
             self.all_observes = [{"observation": obs, "new_game": False}]
         elif done and (self.current_game<self.total_game-1):
