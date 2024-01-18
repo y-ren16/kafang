@@ -68,7 +68,8 @@ class MarketmakingTrainer(BasicActirCriticTrainer):
         state = np.array([state['signal0'], state['signal1'], state['signal2'], state['bp0'], state['bp1'], state['bp2'], state['bp3'], state['bp4'],
                           state['bv0'], state['bv1'], state['bv2'], state['bv3'], state['bv4'], state['ap0'], state['ap1'], state['ap2'], state['ap3'], state['ap4'],
                           state['av0'], state['av1'], state['av2'], state['av3'], state['av4']])
-        state[3:] = state[3:] / ap0_t0
+        state[3:8] = state[3:8] / ap0_t0
+        state[13:18] = state[13:18] / ap0_t0
         return state
 
     def decouple_action(self, action: np.ndarray, observation: dict) -> list:
