@@ -256,6 +256,7 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--state_dim", type=int, help="dimension of state")
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model", default='/devdata1/lhdata/kafang/test')
     parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic", default=512)
@@ -277,7 +278,7 @@ if __name__ == '__main__':
     env = make(env_type, seed=None)
     test_env = make(env_type, seed=None)
 
-    trainer = MarketmakingTrainer(state_dim=23,
+    trainer = MarketmakingTrainer(state_dim=args.state_dim,
                                   critic_mlp_hidden_size=args.critic_mlp_hidden_size,
                                   actor_mlp_hidden_size=args.actor_mlp_hidden_size,
                                   log_alpha=args.log_alpha,
