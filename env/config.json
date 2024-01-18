@@ -1,6 +1,6 @@
 {
   "kafang_stock": {
-    "class_literal": "KaFangStock",
+    "class_literal": "KaFangStockOri",
     "act_box": {"discrete_n": 2},
     "agent_nums": [1],
     "game_name": "kafang_stock",
