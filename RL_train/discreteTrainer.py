@@ -12,10 +12,9 @@ import random
 
 
 # SunTree和PrioritizedExperienceReplay参考https://github.com/takoika/PrioritizedExperienceReplay
-
 class SumTree(object):
-    def __init__(self, max_size):
-        self.max_size = max_size
+    def __init__(self, max_size: int):
+        self.max_size = int(max_size)
         self.tree_level = math.ceil(math.log(max_size + 1, 2)) + 1  # 树的层数，树的叶子节点个数不小于max_size
         self.tree_size = 2 ** self.tree_level - 1  # 树的总节点数
         self.tree = [0 for i in range(self.tree_size)]  # 记录每个节点的权重，未填充的叶子节点初始权重为0（即所有节点权重均为0）
@@ -156,7 +155,7 @@ class PrioritizedExperienceReplay(object):
         return self.tree.filled_size()
 
 
-class RainbowTrainer:
+class DiscreteTrainer:
     def __init__(self, state_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau, env, test_env,
                  replay_buffer_capacity, device, priorities_coefficient=0.9, priorities_bias=1):
         action_dim = 11  # 0-4：买入，5：不做：6-10：卖出
@@ -213,12 +212,12 @@ class RainbowTrainer:
             bid_price = observation[f'ap{action}']
             bid_volume = 0
             for i in range(action + 1):
-                bid_volume += observation[f'av{action}']
+                bid_volume += observation[f'av{i}']
             bid_volume = min(bid_volume, 300 - observation['code_net_position'])
             if bid_volume > 0:
                 return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
         elif action > 5:
-            ask_price = observation[f'bp{action}']
+            ask_price = observation[f'bp{action-6}']
             ask_volume = 0
             for i in range(action - 5):
                 ask_volume += observation[f'bv{i}']
@@ -229,29 +228,30 @@ class RainbowTrainer:
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
     def get_action(self, state):
-        q = self.critic(state)
+        q = torch.min(self.critic(state), dim=0)[0]
         return q.argmax(dim=-1)
 
     def critic_train_step(self, batch_size):
-        out, indices, weights, priorities = self.replay_buffer.sample(min(batch_size, len(self.replay_buffer)))
+        batch_size = min(batch_size, len(self.replay_buffer))
+        out, indices, weights, priorities = self.replay_buffer.sample(batch_size)
         state, action, reward, next_state, done = map(np.stack, zip(*out))
         state = torch.FloatTensor(state).to(self.device)
         next_state = torch.FloatTensor(next_state).to(self.device)
-        action = torch.FloatTensor(action).to(self.device)
+        action = torch.tensor(action, dtype=torch.int64).to(self.device)
         reward = torch.FloatTensor(reward).to(self.device)
-        if len(reward.shape) == 1:
-            reward = reward.unsqueeze(-1)  # shape=(batch_size, 1)
+        if len(reward.shape) == 2:
+            reward = reward.squeeze(-1)  # shape=(batch_size,)
         done = torch.FloatTensor(done).to(self.device)
-        if len(done.shape) == 1:
-            done = done.unsqueeze(-1)  # shape=(batch_size, 1)
+        if len(done.shape) == 2:
+            done = done.squeeze(-1)  # shape=(batch_size,)
         with torch.no_grad():
             next_action = self.get_action(next_state)
-            next_q_value = torch.min(self.target_critic(next_state, next_action), dim=0)[0]
+            next_q_value = torch.min(self.target_critic(next_state), dim=0)[0][torch.arange(batch_size), next_action]
             target_q_value = reward + (1 - done) * self.gamma * next_q_value
-
+        assert target_q_value.shape == torch.Size([batch_size])
         critic_loss = torch.zeros_like(reward)
         for q_net in self.critic.Qs:
-            critic_loss += (q_net(state)[action] - target_q_value) ** 2
+            critic_loss += (q_net(state)[torch.arange(batch_size), action] - target_q_value) ** 2
 
         priorities = self.priorities_coefficient * priorities + (1 - self.priorities_coefficient) * (
                 np.clip(critic_loss.detach().cpu().numpy() ** 0.5, 0, 20) + self.priorities_bias)
@@ -285,7 +285,7 @@ class RainbowTrainer:
         state = self.extract_state(all_observes)
 
         for i in range(int(train_step) + 1):
-            action = self.get_action(state=torch.FloatTensor(state).to(self.device))
+            action = self.get_action(state=torch.FloatTensor(state).to(self.device)).item()
             decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
             all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
             next_state = self.extract_state(all_observes)
@@ -371,17 +371,17 @@ if __name__ == '__main__':
     env = make(env_type, seed=None)
     test_env = make(env_type, seed=None)
 
-    trainer = RainbowTrainer(state_dim=23,
-                             critic_mlp_hidden_size=args.critic_mlp_hidden_size,
-                             critic_lr=args.critic_lr,
-                             gamma=args.gamma,
-                             soft_tau=args.soft_tau,
-                             env=env,
-                             test_env=test_env,
-                             replay_buffer_capacity=args.replay_buffer_capacity,
-                             device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                             # device=torch.device("cpu")
-                             )
+    trainer = DiscreteTrainer(state_dim=3,
+                              critic_mlp_hidden_size=args.critic_mlp_hidden_size,
+                              critic_lr=args.critic_lr,
+                              gamma=args.gamma,
+                              soft_tau=args.soft_tau,
+                              env=env,
+                              test_env=test_env,
+                              replay_buffer_capacity=args.replay_buffer_capacity,
+                              device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                              # device=torch.device("cpu")
+                              )
 
     trainer.RL_train(save_dir=args.save_dir,
                      train_step=args.rl_step,

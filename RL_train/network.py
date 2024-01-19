@@ -111,6 +111,41 @@ class GaussianPolicyNetwork(nn.Module):
             action = action.detach().cpu().numpy()
         return action
 
+
+class DiscreteQNetwork(nn.Module):
+    def __init__(self, state_dim, action_dim, hidden_size, init_w=3e-3):
+        super(DiscreteQNetwork, self).__init__()
+
+        self.linear1 = nn.Linear(state_dim, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        self.linear3 = nn.Linear(hidden_size, action_dim)
+
+        self.linear3.weight.data.uniform_(-init_w, init_w)
+        self.linear3.bias.data.uniform_(-init_w, init_w)
+
+    def forward(self, state):
+        x = F.relu(self.linear1(state))
+        x = F.relu(self.linear2(x))
+        x = self.linear3(x)
+        return x
+
+
+class MultiDiscreteQNetwork(nn.Module):
+    def __init__(self, state_dim, action_dim, hidden_size, ensembles=2, init_w=3e-3):
+        super(MultiDiscreteQNetwork, self).__init__()
+        self.Qs = nn.ModuleList([DiscreteQNetwork(state_dim, action_dim, hidden_size, init_w) for _ in range(ensembles)])
+
+    def forward(self, state):
+        out = [q_net(state) for q_net in self.Qs]
+        return torch.stack(out, dim=0)
+
+    def qLoss(self, target, state, action, criterion):
+        loss = 0
+        for q_net in self.Qs:
+            loss += criterion(q_net(state)[action], target)
+        return loss
+
+
 class ReplayBuffer:
     def __init__(self, capacity):
         self.capacity = int(capacity)
