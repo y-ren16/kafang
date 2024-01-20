@@ -46,7 +46,6 @@ class ObservesCollect:
             all_observes = all_observes[0]['observation']
         else:
             all_observes = all_observes['observation']
-
         if len(self.cache) == 0:
             for i in range(self.cache.maxlen):
                 self.cache.append(all_observes)
@@ -66,7 +65,8 @@ class ObservesCollect:
         signal1_history_np = np.array(signal1_history)
         signal2_history_np = np.array(signal2_history)
         # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
-        state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
+        position = all_observes['code_net_position']
+        state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position), axis=0)
         return state
 
     def clear(self):
