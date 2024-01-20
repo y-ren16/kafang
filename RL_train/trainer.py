@@ -2,6 +2,9 @@ import torch
 import numpy as np
 from RL_train.basicSACTrainer import basicSACMarketmakingTrainer
 from collections import deque
+from torch.utils.tensorboard import SummaryWriter
+import os
+
 
 class ObservesCollect:  
     def __init__(self, maxlen=5):
@@ -54,20 +57,20 @@ class ObservesCollect:
         signal0_history = []
         signal1_history = []
         signal2_history = []
-        for i in range (0, self.cache.maxlen - 1):
+        for i in range (0, self.cache.maxlen):
             # fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
             signal0_history.append(self.cache[i]['signal0'])
             signal1_history.append(self.cache[i]['signal1'])
             signal2_history.append(self.cache[i]['signal2'])
-        # state = np.array([all_observes['signal0'], all_observes['signal1'], all_observes['signal2'], fsrr0, fsrr1, fsrr2, fsrr3, fsrr4])
-        state = np.array([all_observes['signal0'], all_observes['signal1'], all_observes['signal2']])
-        # fsrr_history_np = np.array(fsrr_history)
         signal0_history_np = np.array(signal0_history)
         signal1_history_np = np.array(signal1_history)
         signal2_history_np = np.array(signal2_history)
         # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
-        state = np.concatenate((state, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
+        state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
         return state
+
+    def clear(self):
+        self.cache.clear()
 
 
 class MarketmakingTrainer(basicSACMarketmakingTrainer):
@@ -75,6 +78,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device, max_cache_len):
         action_dim = 2  # 动作空间为较低的计划买入价和较高的计划卖出价
         self.observes_collect = ObservesCollect(maxlen=max_cache_len)
+        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len)
 
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device)
@@ -137,6 +141,68 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
+
+    def RL_train(self, save_dir, train_step, batch_size):
+        if not os.path.exists(os.path.join(save_dir, 'log')):
+            os.makedirs(os.path.join(save_dir, 'log'))
+        if not os.path.exists(os.path.join(save_dir, 'models')):
+            os.makedirs(os.path.join(save_dir, 'models'))
+
+        logger_writer = SummaryWriter(os.path.join(save_dir, 'log'))
+
+        all_observes = self.env.reset()
+        self.test_env.reset()
+        state = self.observes_collect.extract_state(all_observes)
+
+        for i in range(int(train_step) + 1):
+            action = self.actor.get_action(state=torch.FloatTensor(state).to(self.device))
+            decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
+            all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
+            next_state = self.observes_collect.extract_state(all_observes)
+            self.replay_buffer.push(state, action, reward, next_state, done)
+            if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
+                self.observes_collect.clear()
+            if self.env.done:
+                all_observes = self.env.reset()
+                state = self.observes_collect.extract_state(all_observes)
+            else:
+                state = next_state
+
+            logger = {}
+            logger.update(self.critic_train_step(batch_size))
+            self.soft_update_target_critic()
+            logger.update(self.actor_train_step(batch_size))
+            if i % 10000 == 0:
+                logger['test_reward_mean'] = self.RL_test(test_length=10000)
+
+                for key in logger.keys():
+                    logger_writer.add_scalar(key, logger[key], i)
+                self.save_RL_part(os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
+                info = 'step: %dk' % (i / 1000)
+                # info = 'step: %d' % (i)
+                for key in logger.keys():
+                    info += ' | %s: %.3f' % (key, logger[key])
+                print(info)
+
+    def RL_test(self, test_length=1000):
+        reward_sum = 0
+        for _ in range(test_length):
+            all_observes = self.test_env.all_observes
+            state = self.test_observes_collect.extract_state(all_observes)
+            # while not self.test_env.done:
+            state = torch.FloatTensor(state).to(self.device)
+            action = self.actor.get_action(state)
+            decoupled_action = self.decouple_action(action=action,
+                                                    observation=all_observes[0])
+            all_observes, reward, done, info_before, info_after = self.test_env.step([decoupled_action])
+            reward_sum += reward
+            if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
+                self.test_observes_collect.clear()
+            if self.test_env.done:
+                self.test_env.reset()
+            # state = next_state
+
+        return reward_sum
 
 
 if __name__ == '__main__':
