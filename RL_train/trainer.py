@@ -1,12 +1,80 @@
 import torch
 import numpy as np
 from RL_train.basicSACTrainer import basicSACMarketmakingTrainer
+from collections import deque
+
+class ObservesCollect:  
+    def __init__(self, maxlen=5):
+        self.cache = deque(maxlen=maxlen)
+
+    def calculate_sum_residual_ratio(self, all_observes):
+        ap0 = all_observes['ap0']
+        ap1 = all_observes['ap1']
+        ap2 = all_observes['ap2']
+        ap3 = all_observes['ap3']
+        ap4 = all_observes['ap4']
+        bp0 = all_observes['bp0']
+        bp1 = all_observes['bp1']
+        bp2 = all_observes['bp2']
+        bp3 = all_observes['bp3']
+        bp4 = all_observes['bp4']
+        mid_price = (ap0 + bp0) / 2
+        ar0 = (ap0 - mid_price) * all_observes['av0']
+        ar1 = (ap1 - mid_price) * all_observes['av1']
+        ar2 = (ap2 - mid_price) * all_observes['av2']
+        ar3 = (ap3 - mid_price) * all_observes['av3']
+        ar4 = (ap4 - mid_price) * all_observes['av4']
+        br0 = (mid_price - bp0) * all_observes['bv0']
+        br1 = (mid_price - bp1) * all_observes['bv1']
+        br2 = (mid_price - bp2) * all_observes['bv2']
+        br3 = (mid_price - bp3) * all_observes['bv3']
+        br4 = (mid_price - bp4) * all_observes['bv4']
+        f_sum_residual_ratio_0 = ar0 / br0
+        f_sum_residual_ratio_1 = (ar1 + ar0) / (br1 + br0)
+        f_sum_residual_ratio_2 = (ar2 + ar1 + ar0) / (br2 + br1 + br0)
+        f_sum_residual_ratio_3 = (ar3 + ar2 + ar1 + ar0) / (br3 + br2 + br1 + br0)
+        f_sum_residual_ratio_4 = (ar4 + ar3 + ar2 + ar1 + ar0) / (br4 + br3 + br2 + br1 + br0)
+        return f_sum_residual_ratio_0, f_sum_residual_ratio_1, f_sum_residual_ratio_2, f_sum_residual_ratio_3, f_sum_residual_ratio_4
+
+    def extract_state(self, all_observes) -> np.ndarray:
+        # import pdb
+        # pdb.set_trace()
+        if isinstance(all_observes, list):
+            all_observes = all_observes[0]['observation']
+        else:
+            all_observes = all_observes['observation']
+
+        if len(self.cache) == 0:
+            for i in range(self.cache.maxlen):
+                self.cache.append(all_observes)
+        self.cache.append(all_observes)
+
+        # fsrr0, fsrr1, fsrr2, fsrr3, fsrr4 = self.calculate_sum_residual_ratio(all_observes)
+        # fsrr_history = []
+        signal0_history = []
+        signal1_history = []
+        signal2_history = []
+        for i in range (0, self.cache.maxlen - 1):
+            # fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
+            signal0_history.append(self.cache[i]['signal0'])
+            signal1_history.append(self.cache[i]['signal1'])
+            signal2_history.append(self.cache[i]['signal2'])
+        # state = np.array([all_observes['signal0'], all_observes['signal1'], all_observes['signal2'], fsrr0, fsrr1, fsrr2, fsrr3, fsrr4])
+        state = np.array([all_observes['signal0'], all_observes['signal1'], all_observes['signal2']])
+        # fsrr_history_np = np.array(fsrr_history)
+        signal0_history_np = np.array(signal0_history)
+        signal1_history_np = np.array(signal1_history)
+        signal2_history_np = np.array(signal2_history)
+        # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
+        state = np.concatenate((state, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
+        return state
 
 
 class MarketmakingTrainer(basicSACMarketmakingTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
-                 alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device):
+                 alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device, max_cache_len):
         action_dim = 2  # 动作空间为较低的计划买入价和较高的计划卖出价
+        self.observes_collect = ObservesCollect(maxlen=max_cache_len)
 
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device)
@@ -17,21 +85,22 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         :param all_observes: 原始观测值
         :return: 向量化的状态
         """
-        if isinstance(all_observes, list):
-            state = all_observes[0]['observation']
-        else:
-            state = all_observes['observation']
-        ap0_t0 = state['ap0_t0']
-        # state包含给定因子、买单价格、买单手数、卖单价格、卖单手数
-        state = np.array(
-            [state['signal0'], state['signal1'], state['signal2'], state['bp0'], state['bp1'], state['bp2'],
-             state['bp3'], state['bp4'],
-             state['bv0'], state['bv1'], state['bv2'], state['bv3'], state['bv4'], state['ap0'], state['ap1'],
-             state['ap2'], state['ap3'], state['ap4'],
-             state['av0'], state['av1'], state['av2'], state['av3'], state['av4']])
-        state[3:8] = state[3:8] / ap0_t0
-        state[13:18] = state[13:18] / ap0_t0
-        return state
+        return self.observes_collect.extract_state(all_observes)
+        # if isinstance(all_observes, list):
+        #     state = all_observes[0]['observation']
+        # else:
+        #     state = all_observes['observation']
+        # ap0_t0 = state['ap0_t0']
+        # # state包含给定因子、买单价格、买单手数、卖单价格、卖单手数
+        # state = np.array(
+        #     [state['signal0'], state['signal1'], state['signal2'], state['bp0'], state['bp1'], state['bp2'],
+        #      state['bp3'], state['bp4'],
+        #      state['bv0'], state['bv1'], state['bv2'], state['bv3'], state['bv4'], state['ap0'], state['ap1'],
+        #      state['ap2'], state['ap3'], state['ap4'],
+        #      state['av0'], state['av1'], state['av2'], state['av3'], state['av4']])
+        # state[3:8] = state[3:8] / ap0_t0
+        # state[13:18] = state[13:18] / ap0_t0
+        # return state
 
     def decouple_action(self, action: np.ndarray, observation: dict) -> list:
         """
@@ -91,6 +160,9 @@ if __name__ == '__main__':
     parser.add_argument("--target-entropy", type=float, help="target entropy in SAC", default=None)
     parser.add_argument("--soft-tau", type=float, default=0.005)
     parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--max-cache-len", type=int, default=5)
+    parser.add_argument("--basic-state-dim", type=int, default=3)
+    parser.add_argument("--cache-single-dim", type=int, default=3)
 
     args = parser.parse_args()
 
@@ -98,7 +170,7 @@ if __name__ == '__main__':
     env = make(env_type, seed=None)
     test_env = make(env_type, seed=None)
 
-    trainer = MarketmakingTrainer(state_dim=23,
+    trainer = MarketmakingTrainer(state_dim=(args.max_cache_len - 1) * args.cache_single_dim + args.basic_state_dim,
                                   critic_mlp_hidden_size=args.critic_mlp_hidden_size,
                                   actor_mlp_hidden_size=args.actor_mlp_hidden_size,
                                   log_alpha=args.log_alpha,
@@ -111,7 +183,8 @@ if __name__ == '__main__':
                                   env=env,
                                   test_env=test_env,
                                   replay_buffer_capacity=args.replay_buffer_capacity,
-                                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                                  max_cache_len=args.max_cache_len
                                   # device=torch.device("cpu")
                                   )
 
