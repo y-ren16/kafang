@@ -65,7 +65,7 @@ class ObservesCollect:
         signal1_history_np = np.array(signal1_history)
         signal2_history_np = np.array(signal2_history)
         # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
-        position = all_observes['code_net_position']
+        position = np.array([all_observes['code_net_position']])
         state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position), axis=0)
         return state
 
@@ -236,7 +236,7 @@ if __name__ == '__main__':
     env = make(env_type, seed=None)
     test_env = make(env_type, seed=None)
 
-    trainer = MarketmakingTrainer(state_dim=(args.max_cache_len - 1) * args.cache_single_dim + args.basic_state_dim,
+    trainer = MarketmakingTrainer(state_dim=(args.max_cache_len - 1) * args.cache_single_dim + args.basic_state_dim + 1,
                                   critic_mlp_hidden_size=args.critic_mlp_hidden_size,
                                   actor_mlp_hidden_size=args.actor_mlp_hidden_size,
                                   log_alpha=args.log_alpha,
