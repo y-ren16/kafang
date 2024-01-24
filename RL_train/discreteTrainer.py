@@ -10,11 +10,88 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 import math
 import random
+from collections import deque
+import pdb
 
+class ObservesCollect:  
+    def __init__(self, maxlen=5, SRR=False):
+        self.cache = deque(maxlen=maxlen)
+        self.SRR = SRR
+
+    def calculate_sum_residual_ratio(self, all_observes):
+        ap0 = all_observes['ap0']
+        ap1 = all_observes['ap1']
+        ap2 = all_observes['ap2']
+        ap3 = all_observes['ap3']
+        ap4 = all_observes['ap4']
+        bp0 = all_observes['bp0']
+        bp1 = all_observes['bp1']
+        bp2 = all_observes['bp2']
+        bp3 = all_observes['bp3']
+        bp4 = all_observes['bp4']
+        mid_price = (ap0 + bp0) / 2
+        ar0 = (ap0 - mid_price) * all_observes['av0']
+        ar1 = (ap1 - mid_price) * all_observes['av1']
+        ar2 = (ap2 - mid_price) * all_observes['av2']
+        ar3 = (ap3 - mid_price) * all_observes['av3']
+        ar4 = (ap4 - mid_price) * all_observes['av4']
+        br0 = (mid_price - bp0) * all_observes['bv0']
+        br1 = (mid_price - bp1) * all_observes['bv1']
+        br2 = (mid_price - bp2) * all_observes['bv2']
+        br3 = (mid_price - bp3) * all_observes['bv3']
+        br4 = (mid_price - bp4) * all_observes['bv4']
+        f_sum_residual_ratio_0 = ar0 / br0
+        f_sum_residual_ratio_1 = (ar1 + ar0) / (br1 + br0)
+        f_sum_residual_ratio_2 = (ar2 + ar1 + ar0) / (br2 + br1 + br0)
+        f_sum_residual_ratio_3 = (ar3 + ar2 + ar1 + ar0) / (br3 + br2 + br1 + br0)
+        f_sum_residual_ratio_4 = (ar4 + ar3 + ar2 + ar1 + ar0) / (br4 + br3 + br2 + br1 + br0)
+        return f_sum_residual_ratio_0, f_sum_residual_ratio_1, f_sum_residual_ratio_2, f_sum_residual_ratio_3, f_sum_residual_ratio_4
+
+    def extract_state(self, all_observes) -> np.ndarray:
+        # import pdb
+        # pdb.set_trace()
+        if isinstance(all_observes, list):
+            all_observes = all_observes[0]['observation']
+        else:
+            all_observes = all_observes['observation']
+        if len(self.cache) == 0:
+            for i in range(self.cache.maxlen):
+                self.cache.append(all_observes)
+        self.cache.append(all_observes)
+
+        # fsrr0, fsrr1, fsrr2, fsrr3, fsrr4 = self.calculate_sum_residual_ratio(all_observes)
+        # fsrr_history = []
+        signal0_history = []
+        signal1_history = []
+        signal2_history = []
+        for i in range (0, self.cache.maxlen):
+            if self.SRR:
+                if i == self.cache.maxlen - 1:
+                    fsrr_list = self.calculate_sum_residual_ratio(all_observes)
+                    fsrr_history += fsrr_list
+                else:
+                    fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
+            signal0_history.append(self.cache[i]['signal0'])
+            signal1_history.append(self.cache[i]['signal1'])
+            signal2_history.append(self.cache[i]['signal2'])
+        signal0_history_np = np.array(signal0_history)
+        signal1_history_np = np.array(signal1_history)
+        signal2_history_np = np.array(signal2_history)
+        # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
+        position = np.array([all_observes['code_net_position']])
+        if self.SRR:
+            state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position, fsrr_history), axis=0)
+        else:
+            state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position), axis=0)
+        print(state)
+        return state
+
+    def clear(self):
+        self.cache.clear()
 
 class DiscreteTrainer(basicDiscreteTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, critic_lr, actor_lr, gamma, soft_tau, env, test_env,
-                 replay_buffer_capacity, device, priorities_coefficient=0.9, priorities_bias=1, log_alpha=1.0):
+                 replay_buffer_capacity, device, priorities_coefficient=0.9, priorities_bias=1, log_alpha=1.0, max_cache_len=5):
         action_dim = 11  # 0-4：买入，5：不做：6-10：卖出
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau, env, test_env,
                          replay_buffer_capacity, device, priorities_coefficient, priorities_bias)
@@ -23,6 +100,8 @@ class DiscreteTrainer(basicDiscreteTrainer):
 
         self.log_alpha = torch.tensor(log_alpha).to(device)
         # self.log_alpha.requires_grad = True
+        self.observes_collect = ObservesCollect(maxlen=max_cache_len)
+        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len)
 
     @property
     def alpha(self):
@@ -32,21 +111,22 @@ class DiscreteTrainer(basicDiscreteTrainer):
         return self.actor.get_action(state)
 
     def extract_state(self, all_observes) -> np.ndarray:
-        """
-        将原始的观测值转换为向量化的状态
-        :param all_observes: 原始观测值
-        :return: 向量化的状态
-        """
-        if isinstance(all_observes, list):
-            state = all_observes[0]['observation']
-        else:
-            state = all_observes['observation']
-        ap0_t0 = state['ap0_t0']
-        # state包含给定因子、买单价格、买单手数、卖单价格、卖单手数
-        state = np.array([state['signal0'], state['signal1'], state['signal2']])
-        # state[3:8] = state[3:8] / ap0_t0
-        # state[13:18] = state[13:18] / ap0_t0
-        return state
+        return self.observes_collect.extract_state(all_observes)
+        # """
+        # 将原始的观测值转换为向量化的状态
+        # :param all_observes: 原始观测值
+        # :return: 向量化的状态
+        # """
+        # if isinstance(all_observes, list):
+        #     state = all_observes[0]['observation']
+        # else:
+        #     state = all_observes['observation']
+        # ap0_t0 = state['ap0_t0']
+        # # state包含给定因子、买单价格、买单手数、卖单价格、卖单手数
+        # state = np.array([state['signal0'], state['signal1'], state['signal2']])
+        # # state[3:8] = state[3:8] / ap0_t0
+        # # state[13:18] = state[13:18] / ap0_t0
+        # return state
 
     def decouple_action(self, action: int, observation: dict) -> list:
         """
@@ -81,7 +161,9 @@ class DiscreteTrainer(basicDiscreteTrainer):
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
     def get_demonstration(self, state):
+        pdb.set_trace()
         pass
+            
 
     def imitate_step(self, batch_size):
         batch_size = min(batch_size, len(self.replay_buffer))
@@ -172,6 +254,26 @@ class DiscreteTrainer(basicDiscreteTrainer):
                 for key in logger.keys():
                     info += ' | %s: %.3f' % (key, logger[key])
                 print(info)
+    def RL_test(self, test_length=1000):
+        reward_sum = 0
+        for _ in range(test_length):
+            all_observes = self.test_env.all_observes
+            state = self.test_observes_collect.extract_state(all_observes)
+            # state = self.extract_state(all_observes)
+            # while not self.test_env.done:
+            state = torch.FloatTensor(state).to(self.device)
+            action = self.get_action(state)
+            decoupled_action = self.decouple_action(action=action,
+                                                    observation=all_observes[0])
+            all_observes, reward, done, info_before, info_after = self.test_env.step([decoupled_action])
+            reward_sum += reward
+            if done:
+                self.test_observes_collect.clear()
+            if self.test_env.done:
+                self.test_env.reset()
+            # state = next_state
+
+        return reward_sum
 
 
 if __name__ == '__main__':
@@ -196,6 +298,8 @@ if __name__ == '__main__':
     parser.add_argument("--target-entropy", type=float, help="target entropy in SAC", default=None)
     parser.add_argument("--soft-tau", type=float, default=0.005)
     parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--max-cache-len", type=int, default=5)
+    parser.add_argument("--SRR", type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -203,7 +307,14 @@ if __name__ == '__main__':
     env = make(env_type, seed=None)
     test_env = make(env_type, seed=None)
 
-    trainer = DiscreteTrainer(state_dim=3,
+    cache_single_dim = 3
+    basic_state_dim = 3
+    if args.SRR:
+        cache_single_dim += 5
+        basic_state_dim += 1
+    state_dim=(args.max_cache_len - 1) * cache_single_dim + basic_state_dim + 1
+
+    trainer = DiscreteTrainer(state_dim=state_dim,
                               critic_mlp_hidden_size=args.critic_mlp_hidden_size,
                               actor_mlp_hidden_size=args.actor_mlp_hidden_size,
                               critic_lr=args.critic_lr,
@@ -213,7 +324,8 @@ if __name__ == '__main__':
                               env=env,
                               test_env=test_env,
                               replay_buffer_capacity=args.replay_buffer_capacity,
-                              device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                              device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                              max_cache_len=args.max_cache_len
                               # device=torch.device("cpu")
                               )
 
