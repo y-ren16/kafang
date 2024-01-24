@@ -155,7 +155,7 @@ class PrioritizedExperienceReplay(object):
         return self.tree.filled_size()
 
 
-class basicDQNTrainer:
+class basicDiscreteTrainer:
     def __init__(self, state_dim, action_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau, env, test_env,
                  replay_buffer_capacity, device, priorities_coefficient=0.9, priorities_bias=1):
         self.critic = MultiDiscreteQNetwork(state_dim=state_dim,
@@ -239,45 +239,6 @@ class basicDQNTrainer:
             target_param.data.copy_(
                 target_param.data * (1.0 - self.soft_tau) + param.data * self.soft_tau
             )
-
-    def RL_train(self, save_dir, train_step, batch_size):
-        if not os.path.exists(os.path.join(save_dir, 'log')):
-            os.makedirs(os.path.join(save_dir, 'log'))
-        if not os.path.exists(os.path.join(save_dir, 'models')):
-            os.makedirs(os.path.join(save_dir, 'models'))
-
-        logger_writer = SummaryWriter(os.path.join(save_dir, 'log'))
-
-        all_observes = self.env.reset()
-        self.test_env.reset()
-        state = self.extract_state(all_observes)
-
-        for i in range(int(train_step) + 1):
-            action = self.get_action(state=torch.FloatTensor(state).to(self.device)).item()
-            decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
-            all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
-            next_state = self.extract_state(all_observes)
-            self.replay_buffer.push(state, action, reward, next_state, done)
-            if self.env.done:
-                all_observes = self.env.reset()
-                state = self.extract_state(all_observes)
-            else:
-                state = next_state
-
-            logger = {}
-            logger.update(self.critic_train_step(batch_size))
-            self.soft_update_target_critic()
-            if i % 10000 == 0:
-                logger['test_reward_mean'] = self.RL_test(test_length=10000)
-
-                for key in logger.keys():
-                    logger_writer.add_scalar(key, logger[key], i)
-                self.save_RL_part(os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
-                info = 'step: %dk' % (i / 1000)
-                # info = 'step: %d' % (i)
-                for key in logger.keys():
-                    info += ' | %s: %.3f' % (key, logger[key])
-                print(info)
 
     def RL_test(self, test_length=1000):
         reward_sum = 0

@@ -4,6 +4,7 @@ from torch.distributions import Normal
 import random
 import torch
 import numpy as np
+from torch.distributions import Categorical
 
 
 # 状态空间：连续的向量
@@ -128,6 +129,47 @@ class DiscreteQNetwork(nn.Module):
         x = F.relu(self.linear2(x))
         x = self.linear3(x)
         return x
+
+class DiscretePolicyNetwork(nn.Module):
+    def __init__(self, state_dim, action_dim, hidden_size, init_w=3e-3):
+        super(DiscretePolicyNetwork, self).__init__()
+
+        self.linear1 = nn.Linear(state_dim, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        self.linear3 = nn.Linear(hidden_size, action_dim)
+
+        self.linear3.weight.data.uniform_(-init_w, init_w)
+        self.linear3.bias.data.uniform_(-init_w, init_w)
+
+    def forward(self, state):
+        x = F.relu(self.linear1(state))
+        x = F.relu(self.linear2(x))
+        x = self.linear3(x)
+        return F.softmax(x, dim=-1)
+
+    def evaluate(self, state, epsilon=1e-6):
+        prob = self.forward(state)
+        dist = Categorical(prob)
+        action = dist.sample().view(-1, 1)
+        z = (prob == 0.0).float() * epsilon
+        log_prob = torch.log(prob + z)
+
+        return action, prob, log_prob
+
+    def get_action(self, state, dtype='ndarray'):
+        # if not isinstance(state, torch.Tensor):
+        #     state = torch.FloatTensor(state).to(self.device)
+        # if len(state.shape) == 1:
+        #     state = state.unsqueeze(0)
+
+        prob = self.forward(state)
+
+        dist = Categorical(prob)
+        # action = dist.sample().view(-1, 1)
+        action = dist.sample()
+        if dtype == 'ndarray':
+            action = action.detach().cpu().numpy()
+        return action
 
 
 class MultiDiscreteQNetwork(nn.Module):
