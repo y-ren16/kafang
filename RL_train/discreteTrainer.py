@@ -83,7 +83,7 @@ class ObservesCollect:
             state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position, fsrr_history), axis=0)
         else:
             state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position), axis=0)
-        print(state)
+        # print(state)
         return state
 
     def clear(self):
@@ -160,17 +160,62 @@ class DiscreteTrainer(basicDiscreteTrainer):
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
-    def get_demonstration(self, state):
-        pdb.set_trace()
-        pass
+    def get_demonstration(self, state, observation):
+        # pdb.set_trace()
+        obs = observation['observation']
+        # action_vector = [0] * 11  # 初始化11档one hot向量
+        action = 5
+    
+        if obs['signal0'] > 0.8:
+
+            # Long opening
+            price = (obs['ap0'] + obs['bp0']) / 2 * (1 + (obs['signal0'] * 0.0001))
+            if price < obs['ap0']:
+                # action_vector[5] = 1  # 不操作
+                action = 5
+                # side = [0, 1, 0]
+                # volumn = 0
+                # price = 0
+            if obs['ap0'] <= price:
+                # action_vector[4] = 1  # 以 'ap0' 价格买入
+                action = 4
+                # side = [1, 0, 0]
+                # volumn = min(obs['av0'], 300 - obs['code_net_position'])
+                # price = price
+        elif obs['signal0'] < -0.8:
+
+            # Short opening
+            price = (obs['ap0'] + obs['bp0']) / 2 * (1 + (obs['signal0'] * 0.0001))
+            if price > obs['bp0']:
+                # action_vector[5] = 1
+                action = 5
+                # side = [0, 1, 0]
+                # volumn = 0
+                # price = 0
+            if obs['bp0'] >= price:
+                # action_vector[6] = 1
+                action = 6
+                # side = [0, 0, 1]
+                # volumn = min(obs['bv0'], 300 + obs['code_net_position'])
+                # price = price
+        else:
+            # action_vector[5] = 1
+            action = 5
+            # side = [0, 1, 0]
+            # volumn = 0
+            # price = 0
+        # return torch.tensor(action_vector).to(self.device)
+        return torch.tensor([action]).to(self.device)
+        # return [side, [volumn], [price]]
+        
             
 
-    def imitate_step(self, batch_size):
+    def imitate_step(self, batch_size, observation):
         batch_size = min(batch_size, len(self.replay_buffer))
         out, indices, weights, priorities = self.replay_buffer.sample(batch_size)
         state, _, _, _, _ = map(np.stack, zip(*out))
         state = torch.FloatTensor(state).to(self.device)
-        action = self.get_demonstration(state)
+        action = self.get_demonstration(state, observation)
         _, prob, log_prob = self.actor.evaluate(state)
         actor_loss = -torch.log(prob[torch.tensor(range(action.shape[0])), action.view(-1).long()]).mean()
 
@@ -238,7 +283,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
             logger.update(self.critic_train_step(batch_size))
             self.soft_update_target_critic()
             if i < 0:
-                logger.update(self.imitate_step(batch_size))
+                logger.update(self.imitate_step(batch_size, observation=all_observes[0]))
             else:
                 logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
