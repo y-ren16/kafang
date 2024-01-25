@@ -175,8 +175,8 @@ class DiscreteTrainer(basicDiscreteTrainer):
         bp0 = state[:, (self.state_keys.index('bp0')+1)*self.max_cache_len-1]
         price = (ap0 + bp0) / 2 * (1+signal0 * 0.0001)
         action = np.ones(state.shape[0]) * 5  # 默认动作是什么都不操作
-        action[(signal0 > 0.8) * (ap0 <= price)] = 4
-        action[(signal0 < -0.8) * (bp0 >= price)] = 6
+        action[(signal0 > 0.1) * (ap0 <= price)] = 4
+        action[(signal0 < -0.1) * (bp0 >= price)] = 6
         return torch.tensor(action).to(self.device)
 
     def imitate_step(self, batch_size):
