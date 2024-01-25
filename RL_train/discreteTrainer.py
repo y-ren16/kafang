@@ -166,7 +166,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
-    def get_demonstration(self, state):
+    def get_demonstration(self, state, boundary):
         # action_vector = [0] * 11  # 初始化11档one hot向量
         if isinstance(state, torch.Tensor):
             state = state.detach().cpu().numpy()
@@ -175,19 +175,19 @@ class DiscreteTrainer(basicDiscreteTrainer):
         bp0 = state[:, (self.state_keys.index('bp0')+1)*self.max_cache_len-1]
         price = (ap0 + bp0) / 2 * (1+signal0 * 0.0001)
         action = np.ones(state.shape[0]) * 5  # 默认动作是什么都不操作
-        action[(signal0 > 0.1) * (ap0 <= price)] = 4
-        action[(signal0 < -0.1) * (bp0 >= price)] = 6
+        action[(signal0 > boundary) * (ap0 <= price)] = 4
+        action[(signal0 < boundary) * (bp0 >= price)] = 6
         return torch.tensor(action).to(self.device)
 
-    def imitate_step(self, batch_size):
+    def imitate_step(self, batch_size, boundary):
         batch_size = min(batch_size, len(self.replay_buffer))
         out, indices, weights, priorities = self.replay_buffer.sample(batch_size)
         state, _, _, _, _ = map(np.stack, zip(*out))
         state = torch.FloatTensor(state).to(self.device)
-        action = self.get_demonstration(state)
+        action = self.get_demonstration(state, boundary)
         _, prob, log_prob = self.actor.evaluate(state)
-        actor_loss = -log_prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
-        # actor_loss = -prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
+        # actor_loss = -log_prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
+        actor_loss = -prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
@@ -221,7 +221,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
         }
         return logger
 
-    def RL_train(self, save_dir, imitate_step, rl_step, batch_size, init_noise=0.5, noise_dumping=0.95):
+    def RL_train(self, save_dir, imitate_step, rl_step, batch_size, init_noise=0.5, noise_dumping=0.95, boundary=0.8):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -237,6 +237,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
             if random.random() < noise:
                 action = random.randint(0, self.action_dim-1)
             else:
+                # print(state)
                 action = self.get_action(state=torch.FloatTensor(state).to(self.device))
             decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
             all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
@@ -252,7 +253,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
             logger.update(self.critic_train_step(batch_size))
             self.soft_update_target_critic()
             if i < 0:
-                logger.update(self.imitate_step(batch_size))
+                logger.update(self.imitate_step(batch_size, boundary))
             else:
                 logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
@@ -314,6 +315,7 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--max-cache-len", type=int, default=5)
     parser.add_argument("--SRR", type=bool, default=False)
+    parser.add_argument("--boundary", type=float, default=0.8)
 
     args = parser.parse_args()
 
@@ -346,5 +348,6 @@ if __name__ == '__main__':
     trainer.RL_train(save_dir=args.save_dir,
                      imitate_step=args.imitate_step,
                      rl_step=args.rl_step,
-                     batch_size=args.batch_size
+                     batch_size=args.batch_size,
+                     boundary=args.boundary
                      )
