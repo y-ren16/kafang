@@ -14,9 +14,10 @@ from collections import deque
 import pdb
 
 class ObservesCollect:  
-    def __init__(self, maxlen=5, SRR=False):
+    def __init__(self, maxlen=5, keys=('signal0', 'signal1', 'signal2'), SRR=False):
         self.cache = deque(maxlen=maxlen)
         self.SRR = SRR
+        self.keys = keys
 
     def calculate_sum_residual_ratio(self, all_observes):
         ap0 = all_observes['ap0']
@@ -60,29 +61,30 @@ class ObservesCollect:
         self.cache.append(all_observes)
 
         # fsrr0, fsrr1, fsrr2, fsrr3, fsrr4 = self.calculate_sum_residual_ratio(all_observes)
-        # fsrr_history = []
-        signal0_history = []
-        signal1_history = []
-        signal2_history = []
-        for i in range (0, self.cache.maxlen):
-            if self.SRR:
+        history = {key: [] for key in self.keys}
+        for i in range(0, self.cache.maxlen):
+            for key in self.keys:
+                if 'p' in key:
+                    history[key].append(self.cache[i][key]/self.cache[i]['ap0_t0'])
+                else:
+                    history[key].append(self.cache[i][key])
+        for key in self.keys:
+            history[key] = np.array(history[key])
+        # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
+        state = list(history.values())  # 注意必须在python3.6+之后字典的键值才是插入顺序，才能按照固定顺序直接转为list
+        position = np.array([all_observes['code_net_position']])
+        state.append(position)
+        if self.SRR:
+            fsrr_history = []
+            for i in range(0, self.cache.maxlen):
                 if i == self.cache.maxlen - 1:
                     fsrr_list = self.calculate_sum_residual_ratio(all_observes)
                     fsrr_history += fsrr_list
                 else:
                     fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
-            signal0_history.append(self.cache[i]['signal0'])
-            signal1_history.append(self.cache[i]['signal1'])
-            signal2_history.append(self.cache[i]['signal2'])
-        signal0_history_np = np.array(signal0_history)
-        signal1_history_np = np.array(signal1_history)
-        signal2_history_np = np.array(signal2_history)
-        # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
-        position = np.array([all_observes['code_net_position']])
-        if self.SRR:
-            state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position, fsrr_history), axis=0)
-        else:
-            state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position), axis=0)
+            state += fsrr_history
+
+        state = np.concatenate(state, axis=0)
         # print(state)
         return state
 
@@ -90,8 +92,9 @@ class ObservesCollect:
         self.cache.clear()
 
 class DiscreteTrainer(basicDiscreteTrainer):
-    def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, critic_lr, actor_lr, gamma, soft_tau, env, test_env,
-                 replay_buffer_capacity, device, priorities_coefficient=0.9, priorities_bias=1, log_alpha=1.0, max_cache_len=5):
+    def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, critic_lr, actor_lr, gamma, soft_tau,
+                 env, test_env, replay_buffer_capacity, device, priorities_coefficient=0.9, priorities_bias=1,
+                 log_alpha=1.0, max_cache_len=5, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0')):
         action_dim = 11  # 0-4：买入，5：不做：6-10：卖出
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau, env, test_env,
                          replay_buffer_capacity, device, priorities_coefficient, priorities_bias)
@@ -100,8 +103,11 @@ class DiscreteTrainer(basicDiscreteTrainer):
 
         self.log_alpha = torch.tensor(log_alpha).to(device)
         # self.log_alpha.requires_grad = True
-        self.observes_collect = ObservesCollect(maxlen=max_cache_len)
-        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len)
+        self.observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
+        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
+
+        self.max_cache_len = max_cache_len
+        self.state_keys = state_keys
 
     @property
     def alpha(self):
@@ -160,65 +166,28 @@ class DiscreteTrainer(basicDiscreteTrainer):
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
-    def get_demonstration(self, state, observation):
-        # pdb.set_trace()
-        obs = observation['observation']
+    def get_demonstration(self, state):
         # action_vector = [0] * 11  # 初始化11档one hot向量
-        action = 5
-    
-        if obs['signal0'] > 0.8:
+        if isinstance(state, torch.Tensor):
+            state = state.detach().cpu().numpy()
+        signal0 = state[:, (self.state_keys.index('signal0')+1)*self.max_cache_len-1]
+        ap0 = state[:, (self.state_keys.index('ap0')+1)*self.max_cache_len-1]
+        bp0 = state[:, (self.state_keys.index('bp0')+1)*self.max_cache_len-1]
+        price = (ap0 + bp0) / 2 * (1+signal0 * 0.0001)
+        action = np.ones(state.shape[0]) * 5  # 默认动作是什么都不操作
+        action[(signal0 > 0.8) * (ap0 <= price)] = 4
+        action[(signal0 < -0.8) * (bp0 >= price)] = 6
+        return torch.tensor(action).to(self.device)
 
-            # Long opening
-            price = (obs['ap0'] + obs['bp0']) / 2 * (1 + (obs['signal0'] * 0.0001))
-            if price < obs['ap0']:
-                # action_vector[5] = 1  # 不操作
-                action = 5
-                # side = [0, 1, 0]
-                # volumn = 0
-                # price = 0
-            if obs['ap0'] <= price:
-                # action_vector[4] = 1  # 以 'ap0' 价格买入
-                action = 4
-                # side = [1, 0, 0]
-                # volumn = min(obs['av0'], 300 - obs['code_net_position'])
-                # price = price
-        elif obs['signal0'] < -0.8:
-
-            # Short opening
-            price = (obs['ap0'] + obs['bp0']) / 2 * (1 + (obs['signal0'] * 0.0001))
-            if price > obs['bp0']:
-                # action_vector[5] = 1
-                action = 5
-                # side = [0, 1, 0]
-                # volumn = 0
-                # price = 0
-            if obs['bp0'] >= price:
-                # action_vector[6] = 1
-                action = 6
-                # side = [0, 0, 1]
-                # volumn = min(obs['bv0'], 300 + obs['code_net_position'])
-                # price = price
-        else:
-            # action_vector[5] = 1
-            action = 5
-            # side = [0, 1, 0]
-            # volumn = 0
-            # price = 0
-        # return torch.tensor(action_vector).to(self.device)
-        return torch.tensor([action]).to(self.device)
-        # return [side, [volumn], [price]]
-        
-            
-
-    def imitate_step(self, batch_size, observation):
+    def imitate_step(self, batch_size):
         batch_size = min(batch_size, len(self.replay_buffer))
         out, indices, weights, priorities = self.replay_buffer.sample(batch_size)
         state, _, _, _, _ = map(np.stack, zip(*out))
         state = torch.FloatTensor(state).to(self.device)
-        action = self.get_demonstration(state, observation)
+        action = self.get_demonstration(state)
         _, prob, log_prob = self.actor.evaluate(state)
-        actor_loss = -torch.log(prob[torch.tensor(range(action.shape[0])), action.view(-1).long()]).mean()
-
+        # actor_loss = -log_prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
+        actor_loss = -prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
@@ -283,7 +252,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
             logger.update(self.critic_train_step(batch_size))
             self.soft_update_target_critic()
             if i < 0:
-                logger.update(self.imitate_step(batch_size, observation=all_observes[0]))
+                logger.update(self.imitate_step(batch_size))
             else:
                 logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
@@ -352,12 +321,12 @@ if __name__ == '__main__':
     env = make(env_type, seed=None)
     test_env = make(env_type, seed=None)
 
-    cache_single_dim = 3
+    cache_single_dim = 5
     basic_state_dim = 3
     if args.SRR:
         cache_single_dim += 5
         basic_state_dim += 1
-    state_dim=(args.max_cache_len - 1) * cache_single_dim + basic_state_dim + 1
+    state_dim = args.max_cache_len * cache_single_dim + 1
 
     trainer = DiscreteTrainer(state_dim=state_dim,
                               critic_mlp_hidden_size=args.critic_mlp_hidden_size,
