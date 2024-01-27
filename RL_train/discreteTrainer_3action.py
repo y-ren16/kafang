@@ -95,7 +95,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, critic_lr, actor_lr, gamma, soft_tau,
                  env, test_env, replay_buffer_capacity, device, priorities_coefficient=0.9, priorities_bias=1,
                  log_alpha=1.0, max_cache_len=5, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0')):
-        action_dim = 11  # 0-4：买入，5：不做：6-10：卖出
+        action_dim = 3  # 0-4：买入，5：不做：6-10：卖出
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau, env, test_env,
                          replay_buffer_capacity, device, priorities_coefficient, priorities_bias)
         self.actor = DiscretePolicyNetwork(state_dim, action_dim, actor_mlp_hidden_size).to(device)
@@ -147,7 +147,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
         if 'observation' in observation.keys():
             observation = observation['observation']
 
-        if action < 5:
+        if action == 0:
             bid_price = observation[f'ap{action}']
             bid_volume = 0
             for i in range(action + 1):
@@ -155,10 +155,10 @@ class DiscreteTrainer(basicDiscreteTrainer):
             bid_volume = min(bid_volume, 300 - observation['code_net_position'])
             if bid_volume > 0:
                 return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
-        elif action > 5:
-            ask_price = observation[f'bp{action - 6}']
+        elif action == 2:
+            ask_price = observation[f'bp{action - 2}']
             ask_volume = 0
-            for i in range(action - 5):
+            for i in range(action - 1):
                 ask_volume += observation[f'bv{i}']
             ask_volume = min(ask_volume, 300 + observation['code_net_position'])
             if ask_volume > 0:
@@ -174,9 +174,9 @@ class DiscreteTrainer(basicDiscreteTrainer):
         ap0 = state[:, (self.state_keys.index('ap0')+1)*self.max_cache_len-1]
         bp0 = state[:, (self.state_keys.index('bp0')+1)*self.max_cache_len-1]
         price = (ap0 + bp0) / 2 * (1+signal0 * 0.0001)
-        action = np.ones(state.shape[0]) * 5  # 默认动作是什么都不操作
-        action[(signal0 > boundary) * (ap0 <= price)] = 4
-        action[(signal0 < boundary) * (bp0 >= price)] = 6
+        action = np.ones(state.shape[0]) * 1  # 默认动作是什么都不操作
+        action[(signal0 > boundary) * (ap0 <= price)] = 0
+        action[(signal0 < boundary) * (bp0 >= price)] = 2
         return torch.tensor(action).to(self.device)
 
     def imitate_step(self, batch_size, boundary):
