@@ -74,6 +74,8 @@ class ObservesCollect:
         state = list(history.values())  # 注意必须在python3.6+之后字典的键值才是插入顺序，才能按照固定顺序直接转为list
         position = np.array([all_observes['code_net_position']])
         state.append(position)
+        cost = np.array(all_observes['code_cash_pnl']/position/all_observes['ap0_t0']) if position != 0 else np.array([10])
+        state.append(cost)
         if self.SRR:
             fsrr_history = []
             for i in range(0, self.cache.maxlen):
@@ -328,7 +330,7 @@ if __name__ == '__main__':
     if args.SRR:
         cache_single_dim += 5
         basic_state_dim += 1
-    state_dim = args.max_cache_len * cache_single_dim + 1
+    state_dim = args.max_cache_len * cache_single_dim + 2
 
     trainer = DiscreteTrainer(state_dim=state_dim,
                               critic_mlp_hidden_size=args.critic_mlp_hidden_size,
