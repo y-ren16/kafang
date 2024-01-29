@@ -266,6 +266,7 @@ class DiscreteTrainer(basicDiscreteTrainer):
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
                 self.save_RL_part(os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
+                torch.save(self.replay_buffer, os.path.join(save_dir, 'models', 'replay_buffer_%dk.pt' % (i / 1000)))
                 info = 'step: %dk' % (i / 1000)
                 # info = 'step: %d' % (i)
                 for key in logger.keys():
