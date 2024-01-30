@@ -61,7 +61,7 @@ class env_with_reward(KaFangStock):
         reward = self.compute_reward()
 
         if done == 2:
-            obs, done, info = self.env_core.reset()  # reset到下一只股票
+            obs, _, info = self.env_core.reset()  # reset到下一只股票
             self.info_his = [info]
             self.all_observes = [{"observation": obs, "new_game": False}]
         elif done and (self.current_game<self.total_game-1):
