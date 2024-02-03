@@ -95,7 +95,7 @@ class ObservesCollect:
 
 class DiscreteTrainer(basicDiscreteTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, critic_lr, actor_lr, gamma, soft_tau,
-                 env, test_env, replay_buffer_capacity, device, priorities_coefficient=0.9, priorities_bias=1,
+                 env, test_env, replay_buffer_capacity, device, priorities_coefficient=1, priorities_bias=1,
                  log_alpha=1.0, max_cache_len=5, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0')):
         action_dim = 11  # 0-4：买入，5：不做：6-10：卖出
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau, env, test_env,
@@ -144,6 +144,8 @@ class DiscreteTrainer(basicDiscreteTrainer):
                             'ap0'到'ap4'表示从低到高的卖家报价，'av0'到'av4'表示对应的卖家报价手数，
         :return: 具体的订单
         """
+        if isinstance(action, float):
+            action = int(action)
         if isinstance(observation, list):
             observation = observation[0]
         if 'observation' in observation.keys():
@@ -172,6 +174,8 @@ class DiscreteTrainer(basicDiscreteTrainer):
         # action_vector = [0] * 11  # 初始化11档one hot向量
         if isinstance(state, torch.Tensor):
             state = state.detach().cpu().numpy()
+        if len(state.shape) == 1:
+            state = np.expand_dims(state, axis=0)
         signal0 = state[:, (self.state_keys.index('signal0')+1)*self.max_cache_len-1]
         ap0 = state[:, (self.state_keys.index('ap0')+1)*self.max_cache_len-1]
         bp0 = state[:, (self.state_keys.index('bp0')+1)*self.max_cache_len-1]
@@ -188,8 +192,8 @@ class DiscreteTrainer(basicDiscreteTrainer):
         state = torch.FloatTensor(state).to(self.device)
         action = self.get_demonstration(state, boundary)
         _, prob, log_prob = self.actor.evaluate(state)
-        # actor_loss = -log_prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
-        actor_loss = -prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
+        actor_loss = -log_prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
+        # actor_loss = -prob[torch.tensor(range(action.shape[0])), action.view(-1).long()].mean()
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
@@ -210,7 +214,8 @@ class DiscreteTrainer(basicDiscreteTrainer):
             expected_q_value = torch.min(self.critic(state), dim=0)[0]
             expected_q_value = expected_q_value - torch.mean(expected_q_value, dim=-1, keepdim=True) \
                 .repeat(1, expected_q_value.shape[1])  # using advantage function for normalization
-        expected_q_value = self.alpha.detach() * log_prob - expected_q_value
+        # expected_q_value = self.alpha.detach() * log_prob - expected_q_value
+        expected_q_value = - expected_q_value
         actor_loss = torch.einsum('ij,ij->i', expected_q_value, prob).mean()
 
         self.actor_optimizer.zero_grad()
@@ -223,7 +228,43 @@ class DiscreteTrainer(basicDiscreteTrainer):
         }
         return logger
 
-    def RL_train(self, save_dir, imitate_step, rl_step, batch_size, init_noise=0.5, noise_dumping=0.95, boundary=0.8):
+    def critic_train_step(self, batch_size):
+        batch_size = min(batch_size, len(self.replay_buffer))
+        out, indices, weights, priorities = self.replay_buffer.sample(batch_size)
+        state, action, reward, next_state, done = map(np.stack, zip(*out))
+        state = torch.FloatTensor(state).to(self.device)
+        next_state = torch.FloatTensor(next_state).to(self.device)
+        action = torch.tensor(action, dtype=torch.int64).to(self.device)
+        reward = torch.FloatTensor(reward).to(self.device)
+        if len(reward.shape) == 2:
+            reward = reward.squeeze(-1)  # shape=(batch_size,)
+        done = torch.FloatTensor(done).to(self.device)
+        if len(done.shape) == 2:
+            done = done.squeeze(-1)  # shape=(batch_size,)
+        with torch.no_grad():
+            # next_action = self.get_action(next_state)
+            next_prob = self.actor(next_state)
+            next_q = torch.min(self.target_critic(next_state), dim=0)[0]
+            target_q = reward + (1 - done) * self.gamma * torch.einsum('ij,ij->i', next_q, next_prob)
+        assert target_q.shape == torch.Size([batch_size])
+        critic_loss = torch.zeros_like(reward)
+        for q_net in self.critic.Qs:
+            critic_loss += (q_net(state)[torch.arange(batch_size), action] - target_q) ** 2
+
+        priorities = self.priorities_coefficient * priorities + (1 - self.priorities_coefficient) * (
+                np.clip(critic_loss.detach().cpu().numpy() ** 0.5, 0, 100) + self.priorities_bias)
+        self.replay_buffer.priority_update(indices, priorities)
+
+        critic_loss = critic_loss.mean()
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
+        logger = {
+            'critic_loss': critic_loss.item()
+        }
+        return logger
+
+    def RL_train(self, save_dir, imitate_step, rl_step, batch_size, init_noise=0.5, noise_dumping=0.99, boundary=0.8):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -236,11 +277,16 @@ class DiscreteTrainer(basicDiscreteTrainer):
         state = self.extract_state(all_observes)
         noise = init_noise
         for i in range(-int(imitate_step), int(rl_step) + 1):
+            # print(i)
+            # if i == -199076:
+            #     print(i)
             if random.random() < noise:
-                action = random.randint(0, self.action_dim-1)
+                action = random.randint(0, self.action_dim - 1)
             else:
-                # print(state)
-                action = self.get_action(state=torch.FloatTensor(state).to(self.device))
+                if i < 0:
+                    action = self.get_demonstration(state=torch.FloatTensor(state).to(self.device), boundary=boundary).item()
+                else:
+                    action = self.get_action(state=torch.FloatTensor(state).to(self.device))
             decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
             all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
             next_state = self.extract_state(all_observes)
@@ -272,8 +318,10 @@ class DiscreteTrainer(basicDiscreteTrainer):
                 for key in logger.keys():
                     info += ' | %s: %.3f' % (key, logger[key])
                 print(info)
-    def RL_test(self, test_length=1000):
+
+    def RL_test(self, test_length=10000):
         reward_sum = 0
+        # init_position =
         for _ in range(test_length):
             all_observes = self.test_env.all_observes
             state = self.test_observes_collect.extract_state(all_observes)
@@ -293,6 +341,20 @@ class DiscreteTrainer(basicDiscreteTrainer):
 
         return reward_sum
 
+    def save_RL_part(self, save_path):
+        torch.save({'critic': self.critic.state_dict(),
+                    'target_critic': self.target_critic.state_dict(),
+                    'actor': self.actor.state_dict()
+                    },
+                   save_path)
+        return
+
+    def load_RL_part(self, save_path):
+        payload = torch.load(save_path)
+        self.critic.load_state_dict(payload['critic'])
+        self.target_critic.load_state_dict(payload['target_critic'])
+        self.actor.load_state_dict(payload['actor'])
+        return
 
 if __name__ == '__main__':
     from env.chooseenv import make
@@ -301,7 +363,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
                         default='/devdata1/lhdata/kafang/test')
-    parser.add_argument("--imitate-step", type=float, help="steps for imitation", default=1e6)
+    parser.add_argument("--imitate-step", type=float, help="steps for imitation", default=0)
     parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
                         default=512)
@@ -316,9 +378,9 @@ if __name__ == '__main__':
     parser.add_argument("--target-entropy", type=float, help="target entropy in SAC", default=None)
     parser.add_argument("--soft-tau", type=float, default=0.005)
     parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--max-cache-len", type=int, default=5)
+    parser.add_argument("--max-cache-len", type=int, default=1)
     parser.add_argument("--SRR", type=bool, default=False)
-    parser.add_argument("--boundary", type=float, default=0.8)
+    parser.add_argument("--boundary", type=float, default=0.5)
 
     args = parser.parse_args()
 
@@ -352,5 +414,6 @@ if __name__ == '__main__':
                      imitate_step=args.imitate_step,
                      rl_step=args.rl_step,
                      batch_size=args.batch_size,
-                     boundary=args.boundary
+                     boundary=args.boundary,
+                     init_noise=0.2
                      )

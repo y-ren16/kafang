@@ -214,12 +214,12 @@ class basicDiscreteTrainer:
             done = done.squeeze(-1)  # shape=(batch_size,)
         with torch.no_grad():
             next_action = self.get_action(next_state)
-            next_q_value = torch.min(self.target_critic(next_state), dim=0)[0][torch.arange(batch_size), next_action]
-            target_q_value = reward + (1 - done) * self.gamma * next_q_value
-        assert target_q_value.shape == torch.Size([batch_size])
+            next_q = torch.min(self.target_critic(next_state), dim=0)[0][torch.arange(batch_size), next_action]
+            target_q = reward + (1 - done) * self.gamma * next_q
+        assert target_q.shape == torch.Size([batch_size])
         critic_loss = torch.zeros_like(reward)
         for q_net in self.critic.Qs:
-            critic_loss += (q_net(state)[torch.arange(batch_size), action] - target_q_value) ** 2
+            critic_loss += (q_net(state)[torch.arange(batch_size), action] - target_q) ** 2
 
         priorities = self.priorities_coefficient * priorities + (1 - self.priorities_coefficient) * (
                 np.clip(critic_loss.detach().cpu().numpy() ** 0.5, 0, 100) + self.priorities_bias)

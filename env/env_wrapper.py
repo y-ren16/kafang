@@ -61,13 +61,16 @@ class env_with_reward(KaFangStock):
         reward = self.compute_reward()
 
         if done == 2:
+            # print(1)
             obs, _, info = self.env_core.reset()  # reset到下一只股票
             self.info_his = [info]
             self.all_observes = [{"observation": obs, "new_game": False}]
         elif done and (self.current_game<self.total_game-1):
+            # print(2)
             obs = self.reset_game()
             self.all_observes = obs
         elif done and (self.current_game==self.total_game-1):
+            # print(3)
             self.done = True
             self.all_observes = [{"observation": obs, "new_game": False}]
         else:
@@ -90,6 +93,11 @@ class env_with_pnl_reward(env_with_reward, ABC):
         super(env_with_pnl_reward, self).__init__(conf, seed)
 
     def compute_reward(self):
+        # code_pnl的计算方式如下：code_positional_pnl+code_cash_pnl-code_handling_fee
+        # 其中code_positional_pnl=code_net_position*10*(ap0+bp0)/2，即使用最高买价和最低卖价的均值作为股票估价来计算持仓估值
+        # code_cash_pnl为现金变化量（不考虑手续费）
+        # code_handling_fee为手续费，买/卖双方均需支付，比例为0.00007
+
         if len(self.info_his) > 1:
             return (self.info_his[-1]['code_pnl'] - self.info_his[-2]['code_pnl']) / self.all_observes[0]['observation']['ap0_t0']
         else:
