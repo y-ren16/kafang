@@ -159,7 +159,7 @@ class DQNTrainer(basicDiscreteTrainer):
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
-    def RL_train(self, save_dir, rl_step, batch_size, init_noise=0.5, noise_dumping=0.99, boundary=0.8):
+    def RL_train(self, save_dir, rl_step, batch_size, init_noise=0.5, noise_dumping=0.99):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -250,7 +250,6 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--max-cache-len", type=int, default=1)
     parser.add_argument("--SRR", type=bool, default=False)
-    parser.add_argument("--boundary", type=float, default=0.5)
 
     args = parser.parse_args()
 
@@ -281,6 +280,5 @@ if __name__ == '__main__':
     trainer.RL_train(save_dir=args.save_dir,
                      rl_step=args.rl_step,
                      batch_size=args.batch_size,
-                     boundary=args.boundary,
                      init_noise=0.5
                      )
