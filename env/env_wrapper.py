@@ -17,7 +17,7 @@ class env_with_reward(KaFangStock):
         """
         date = self.dateList[self.current_game]
         file = ParquetFile()
-        file.filename = os.path.join(stock_path, "./data_resampled/" + date + '/train_data.parquet')
+        file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
         file.load()
         df = file.data
         code_list = []
