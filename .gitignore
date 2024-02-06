@@ -12,3 +12,4 @@ LICENSE
 docs/
 output
 trainlog*
+*.csv

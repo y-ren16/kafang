@@ -13,6 +13,13 @@ import random
 from collections import deque
 import pdb
 
+def setup_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+
 class ObservesCollect:  
     def __init__(self, maxlen=5, keys=('signal0', 'signal1', 'signal2'), SRR=False):
         self.cache = deque(maxlen=maxlen)
@@ -250,12 +257,16 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--max-cache-len", type=int, default=1)
     parser.add_argument("--SRR", type=bool, default=False)
+    parser.add_argument("--seed", type=int, default=20)
 
     args = parser.parse_args()
 
+    # 设置随机数种子
+    setup_seed(args.seed)
+    
     env_type = "kafang_stock"
-    env = make(env_type, seed=None)
-    test_env = make(env_type, seed=None)
+    env = make(env_type, seed=args.seed)
+    test_env = make(env_type, seed=args.seed)
 
     cache_single_dim = 5
     basic_state_dim = 3
