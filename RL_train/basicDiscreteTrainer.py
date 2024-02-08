@@ -164,7 +164,8 @@ class basicDiscreteTrainer:
                                             ).to(device)
         self.target_critic = copy.deepcopy(self.critic)
 
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_lr)
+        # self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_lr)
+        self.critic_optimizer = optim.SGD(self.critic.parameters(), lr=critic_lr)
         self.state_dim = state_dim
         self.action_dim = action_dim
 

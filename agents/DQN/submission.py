@@ -6,44 +6,29 @@ from pathlib import Path
 import sys
 import torch
 
-from RL_train.DQNTrainer import DQNTrainer
-from env.chooseenv import make
-import pdb
+current_file_path = os.path.abspath(__file__)
+current_dir = os.path.dirname(current_file_path)
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--model_path', type=str, default='./DQN/models/RL_part_1500k.pt')
-parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
-                    default='/devdata1/lhdata/kafang/DQN')
-parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
-                    default=512)
-parser.add_argument("--critic-lr", type=float, help="learning rate of critic", default=3e-4)
-parser.add_argument("--batch-size", type=int, help="number of samples per minibatch", default=256)
-parser.add_argument("--replay-buffer-capacity", type=int, help="replay buffer size", default=1e6)
-parser.add_argument("--target-entropy", type=float, help="target entropy in SAC", default=None)
-parser.add_argument("--soft-tau", type=float, default=0.005)
-parser.add_argument("--gamma", type=float, default=0.99)
-parser.add_argument("--max-cache-len", type=int, default=1)
-args = parser.parse_args()
+from DQNTrainer import DQNTrainer
 
-env_type = "kafang_stock"
-env = make(env_type, seed=None)
-test_env = make(env_type, seed=None)
 cache_single_dim = 5
 basic_state_dim = 3
-state_dim = args.max_cache_len * cache_single_dim + 2
+state_dim = 1 * cache_single_dim + 2
 
 agent = DQNTrainer(state_dim=state_dim,
-                     critic_mlp_hidden_size=args.critic_mlp_hidden_size,
-                     critic_lr=args.critic_lr,
-                     gamma=args.gamma,
-                     soft_tau=args.soft_tau,
-                     env=env,
-                     test_env=test_env,
-                     replay_buffer_capacity=args.replay_buffer_capacity,
-                     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-                     max_cache_len=args.max_cache_len
-                     )
-agent.load_RL_part(args.model_path)
+                   critic_mlp_hidden_size=512,
+                   critic_lr=3e-4,
+                   gamma=0.99,
+                   soft_tau=0.005,
+                   env=None,
+                   test_env=None,
+                   replay_buffer_capacity=1e6,
+                   device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                   max_cache_len=1
+                   )
+agent.load_RL_part(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'RL_part_1500k.pt'))
 
 
 def my_controller(observation, action_space, is_act_continuous=False):

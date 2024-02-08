@@ -107,7 +107,7 @@ if __name__ == "__main__":
                         os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
     print(dateList)
     os.makedirs(os.path.join(stock_path, "./data_resampled"), exist_ok=True)
-    for date in tqdm(dateList[:]):
+    for date in tqdm(dateList[:1]):
         print(date)
         if date == '20200225' or date == '20200224' or date == '20200221' or date == '20200220':
             continue

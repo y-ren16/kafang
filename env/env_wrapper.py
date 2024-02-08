@@ -10,6 +10,8 @@ class env_with_reward(KaFangStock):
         self.seed = seed
         self.info_his = []
 
+        self.last_pnl = None
+
     def reset_env_core(self):
         """
         将初始化env_core，env_core的数据为第self.dateList[self.current_game]天的数据，与基类KaFangStock的reset_env_core相比，增加了保存初始info
@@ -62,15 +64,19 @@ class env_with_reward(KaFangStock):
 
         if done == 2:
             # print(1)
+            # self.last_pnl = (obs['code'], obs['code_pnl'])
+            print(obs)
             obs, _, info = self.env_core.reset()  # reset到下一只股票
             self.info_his = [info]
             self.all_observes = [{"observation": obs, "new_game": False}]
         elif done and (self.current_game<self.total_game-1):
             # print(2)
+            self.last_pnl = (obs['code'], obs['code_pnl'])
             obs = self.reset_game()
             self.all_observes = obs
         elif done and (self.current_game==self.total_game-1):
             # print(3)
+            self.last_pnl = (obs['code'], obs['code_pnl'])
             self.done = True
             self.all_observes = [{"observation": obs, "new_game": False}]
         else:
