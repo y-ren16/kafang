@@ -258,6 +258,10 @@ if __name__ == '__main__':
     parser.add_argument("--max-cache-len", type=int, default=1)
     parser.add_argument("--SRR", type=bool, default=False)
     parser.add_argument("--seed", type=int, default=20)
+    parser.add_argument("--noise-dumping", type=float, default=0.99)
+    parser.add_argument("--init-noise", type=float, default=0.5)
+
+
 
     args = parser.parse_args()
 
@@ -291,5 +295,6 @@ if __name__ == '__main__':
     trainer.RL_train(save_dir=args.save_dir,
                      rl_step=args.rl_step,
                      batch_size=args.batch_size,
-                     init_noise=0.5
+                     init_noise=args.init_noise,
+                     noise_dumping=args.noise_dumping
                      )
