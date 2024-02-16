@@ -260,8 +260,8 @@ if __name__ == '__main__':
     parser.add_argument("--seed", type=int, default=20)
     parser.add_argument("--noise-dumping", type=float, default=0.99)
     parser.add_argument("--init-noise", type=float, default=0.5)
-
-
+    parser.add_argument("--priorities-coefficient", type=float, default=0.5)
+    parser.add_argument("--priorities-bias", type=float, default=0.05)
 
     args = parser.parse_args()
 
@@ -288,7 +288,9 @@ if __name__ == '__main__':
                          test_env=test_env,
                          replay_buffer_capacity=args.replay_buffer_capacity,
                          device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-                         max_cache_len=args.max_cache_len
+                         max_cache_len=args.max_cache_len,
+                         priorities_coefficient=args.priorities_coefficient,
+                         priorities_bias=args.priorities_bias
                          # device=torch.device("cpu")
                          )
 
