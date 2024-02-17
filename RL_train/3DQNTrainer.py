@@ -79,10 +79,10 @@ class ObservesCollect:
             history[key] = np.array(history[key])
         # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
         state = list(history.values())  # 注意必须在python3.6+之后字典的键值才是插入顺序，才能按照固定顺序直接转为list
-        position = np.array([all_observes['code_net_position']])
-        state.append(position)
-        cost = np.array(all_observes['code_cash_pnl']/position/all_observes['ap0_t0']) if position != 0 else np.array([10])
-        state.append(cost)
+        # position = np.array([all_observes['code_net_position']])
+        # state.append(position)
+        # cost = np.array(all_observes['code_cash_pnl']/position/all_observes['ap0_t0']) if position != 0 else np.array([10])
+        # state.append(cost)
         if self.SRR:
             fsrr_history = []
             for i in range(0, self.cache.maxlen):
@@ -103,8 +103,8 @@ class ObservesCollect:
 class DQNTrainer(basicDiscreteTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau,
                  env, test_env, replay_buffer_capacity, device, priorities_coefficient=1, priorities_bias=1,
-                 max_cache_len=5, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0')):
-        action_dim = 11  # 0-4：买入，5：不做：6-10：卖出
+                 max_cache_len=5, state_keys=('signal0', 'signal1', 'signal2')):
+        action_dim = 3  # 0-4：买入，5：不做：6-10：卖出
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau, env, test_env,
                          replay_buffer_capacity, device, priorities_coefficient, priorities_bias)
 
@@ -147,7 +147,7 @@ class DQNTrainer(basicDiscreteTrainer):
         if 'observation' in observation.keys():
             observation = observation['observation']
 
-        if action < 5:
+        if action < 1:
             bid_price = observation[f'ap{action}']
             bid_volume = 0
             for i in range(action + 1):
@@ -155,10 +155,10 @@ class DQNTrainer(basicDiscreteTrainer):
             bid_volume = min(bid_volume, 300 - observation['code_net_position'], 20)
             if bid_volume > 0:
                 return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
-        elif action > 5:
-            ask_price = observation[f'bp{action - 6}']
+        elif action > 1:
+            ask_price = observation[f'bp{action - 2}']
             ask_volume = 0
-            for i in range(action - 5):
+            for i in range(action - 1):
                 ask_volume += observation[f'bv{i}']
             ask_volume = min(ask_volume, 300 + observation['code_net_position'], 20)
             if ask_volume > 0:
@@ -268,12 +268,12 @@ if __name__ == '__main__':
     env = make(env_type, seed=args.seed)
     test_env = make(env_type, seed=args.seed)
 
-    cache_single_dim = 5
+    cache_single_dim = 3
     basic_state_dim = 3
     if args.SRR:
         cache_single_dim += 5
         basic_state_dim += 1
-    state_dim = args.max_cache_len * cache_single_dim + 2
+    state_dim = args.max_cache_len * cache_single_dim
 
     trainer = DQNTrainer(state_dim=state_dim,
                          critic_mlp_hidden_size=args.critic_mlp_hidden_size,
