@@ -10,6 +10,8 @@ imgs/
 README.md
 LICENSE
 docs/
-output
+output*
 trainlog*
 *.csv
+*.pt
+*.zip

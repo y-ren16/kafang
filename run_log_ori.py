@@ -90,7 +90,7 @@ def run_game(g, env_name, multi_part_agent_ids, actions_spaces, policy_list, ren
 
     logger = get_logger(log_path, g.game_name, json_file=render_mode)
     set_seed(g, env_name)
-    g.reset()
+    # g.reset()
     for i in range(len(policy_list)):
         if policy_list[i] not in get_valid_agents():
             raise Exception("agent {} not valid!".format(policy_list[i]))
@@ -121,8 +121,8 @@ def run_game(g, env_name, multi_part_agent_ids, actions_spaces, policy_list, ren
     all_observes = g.all_observes
     while not g.is_terminal():
         step = "step%d" % g.step_cnt
-        # if g.step_cnt % 10 == 0:
-        #     print(step)
+        if g.step_cnt % 10 == 0:
+            print(step)
 
         if render_mode and hasattr(g, "env_core"):
             if hasattr(g.env_core, "render"):
