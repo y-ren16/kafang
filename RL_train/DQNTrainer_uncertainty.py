@@ -162,7 +162,7 @@ class ensembleQNetwork(nn.Module):
                  action_dim: int,
                  mlp_hidden_size: Union[List[int], Tuple[int]],
                  num_ensemble: int = 7,
-                 activation: nn.Module = nn.SiLU,
+                 activation: nn.Module = nn.ReLU,
                  weight_decays: Optional[Union[List[float], Tuple[float]]] = None):
         super(ensembleQNetwork, self).__init__()
         self.num_ensemble = num_ensemble
@@ -257,8 +257,13 @@ class SumTree(object):
 
     def _find(self, value, index):
         if 2 ** (self.tree_level - 1) - 1 <= index:  # index对应的节点已经是叶子节点，则直接返回数据，权重，数据位置
-            return self.data[index - (2 ** (self.tree_level - 1) - 1)], self.tree[index], index - (
-                    2 ** (self.tree_level - 1) - 1)
+            try:
+                return self.data[index - (2 ** (self.tree_level - 1) - 1)], self.tree[index], index - (
+                        2 ** (self.tree_level - 1) - 1)
+            except:
+                print(index, self.tree_level)
+                # import pdb
+                # pdb.set_trace()
 
         left = self.tree[2 * index + 1]
 
@@ -467,9 +472,13 @@ class DQNTrainer_uncertainty:
         # for q_net in self.critic.Qs:
         #     critic_loss += (q_net(state)[torch.arange(batch_size), action] - target_q) ** 2
         critic_loss = torch.sum((self.critic(state)[:, torch.arange(batch_size), action] - target_q.unsqueeze(0).expand(self.num_ensemble, -1)) ** 2, dim=0)
-
+        # if torch.isnan(critic_loss).any():
+        #     print('critic_loss:', critic_loss)
+        #     import pdb
+        #     pdb.set_trace()
         priorities = self.priorities_coefficient * priorities + (1 - self.priorities_coefficient) * (
                 np.clip(critic_loss.detach().cpu().numpy() ** 0.5, 0, 100) + self.priorities_bias)
+        # print(f"priorities{priorities[0]}, self.priorities_coefficient{self.priorities_coefficient}, critic_loss{[0]}, self.priorities_bias{self.priorities_bias}")
         self.replay_buffer.priority_update(indices, priorities)
 
         critic_loss = critic_loss.mean()
