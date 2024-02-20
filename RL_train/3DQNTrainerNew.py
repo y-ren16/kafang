@@ -146,23 +146,38 @@ class DQNTrainer(basicDiscreteTrainer):
             observation = observation[0]
         if 'observation' in observation.keys():
             observation = observation['observation']
-
-        if action < 1:
-            bid_price = observation[f'ap{action}']
-            bid_volume = 0
-            for i in range(action + 1):
-                bid_volume += observation[f'av{i}']
-            bid_volume = min(bid_volume, 300 - observation['code_net_position'], 20)
+        alpha = 1
+        if action == 0:
+            bid_price = observation['ap0']
+            bid_volume = int(observation['av0'] * min(observation['signal0'], 1) * alpha)
+            bid_volume = max(0, bid_volume)
+            bid_volume = min(bid_volume, 300 - observation['code_net_position'])
             if bid_volume > 0:
-                return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
-        elif action > 1:
-            ask_price = observation[f'bp{action - 2}']
-            ask_volume = 0
-            for i in range(action - 1):
-                ask_volume += observation[f'bv{i}']
-            ask_volume = min(ask_volume, 300 + observation['code_net_position'], 20)
+                return [[1, 0, 0], float(bid_volume), bid_price]
+        elif action == 2:
+            ask_price = observation['bp0']
+            ask_volume = int(observation['bv0'] * max(observation['signal0'], -1) * -1 * alpha)
+            ask_volume = max(0, ask_volume)
+            ask_volume = min(ask_volume, 300 + observation['code_net_position'])
             if ask_volume > 0:
-                return [[0, 0, 1], float(ask_volume), ask_price]  # 以ask_price价格卖出ask_volume手
+                return [[0, 0, 1], float(ask_volume), ask_price]
+
+        # if action < 1:
+        #     bid_price = observation[f'ap{action}']
+        #     bid_volume = 0
+        #     for i in range(action + 1):
+        #         bid_volume += observation[f'av{i}']
+        #     bid_volume = min(bid_volume, 300 - observation['code_net_position'], 20)
+        #     if bid_volume > 0:
+        #         return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
+        # elif action > 1:
+        #     ask_price = observation[f'bp{action - 2}']
+        #     ask_volume = 0
+        #     for i in range(action - 1):
+        #         ask_volume += observation[f'bv{i}']
+        #     ask_volume = min(ask_volume, 300 + observation['code_net_position'], 20)
+        #     if ask_volume > 0:
+        #         return [[0, 0, 1], float(ask_volume), ask_price]  # 以ask_price价格卖出ask_volume手
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
