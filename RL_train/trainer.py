@@ -6,9 +6,11 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 
 
-class ObservesCollect:  
-    def __init__(self, maxlen=5):
+class ObservesCollect:
+    def __init__(self, maxlen=5, keys=('signal0', 'signal1', 'signal2'), SRR=False):
         self.cache = deque(maxlen=maxlen)
+        self.SRR = SRR
+        self.keys = keys
 
     def calculate_sum_residual_ratio(self, all_observes):
         ap0 = all_observes['ap0']
@@ -52,21 +54,34 @@ class ObservesCollect:
         self.cache.append(all_observes)
 
         # fsrr0, fsrr1, fsrr2, fsrr3, fsrr4 = self.calculate_sum_residual_ratio(all_observes)
-        # fsrr_history = []
-        signal0_history = []
-        signal1_history = []
-        signal2_history = []
-        for i in range (0, self.cache.maxlen):
-            # fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
-            signal0_history.append(self.cache[i]['signal0'])
-            signal1_history.append(self.cache[i]['signal1'])
-            signal2_history.append(self.cache[i]['signal2'])
-        signal0_history_np = np.array(signal0_history)
-        signal1_history_np = np.array(signal1_history)
-        signal2_history_np = np.array(signal2_history)
+        history = {key: [] for key in self.keys}
+        for i in range(0, self.cache.maxlen):
+            for key in self.keys:
+                if 'p' in key:
+                    history[key].append(self.cache[i][key] / self.cache[i]['ap0_t0'])
+                else:
+                    history[key].append(self.cache[i][key])
+        for key in self.keys:
+            history[key] = np.array(history[key])
         # state = np.concatenate((state, fsrr_history_np, signal0_history_np, signal1_history_np, signal2_history_np), axis=0)
+        state = list(history.values())  # 注意必须在python3.6+之后字典的键值才是插入顺序，才能按照固定顺序直接转为list
         position = np.array([all_observes['code_net_position']])
-        state = np.concatenate((signal0_history_np, signal1_history_np, signal2_history_np, position), axis=0)
+        state.append(position)
+        cost = np.array(
+            all_observes['code_cash_pnl'] / position / all_observes['ap0_t0']) if position != 0 else np.array([10])
+        state.append(cost)
+        if self.SRR:
+            fsrr_history = []
+            for i in range(0, self.cache.maxlen):
+                if i == self.cache.maxlen - 1:
+                    fsrr_list = self.calculate_sum_residual_ratio(all_observes)
+                    fsrr_history += fsrr_list
+                else:
+                    fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
+            state += fsrr_history
+
+        state = np.concatenate(state, axis=0)
+        # print(state)
         return state
 
     def clear(self):
@@ -75,10 +90,11 @@ class ObservesCollect:
 
 class MarketmakingTrainer(basicSACMarketmakingTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
-                 alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device, max_cache_len):
+                 alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device,
+                 max_cache_len, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4')):
         action_dim = 2  # 动作空间为较低的计划买入价和较高的计划卖出价
-        self.observes_collect = ObservesCollect(maxlen=max_cache_len)
-        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len)
+        self.observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
+        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
 
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device)
@@ -126,7 +142,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 ask_volume += observation[f'bv{i}']
             else:
                 break
-        ask_volume = min(ask_volume, 300 + observation['code_net_position'])
+        ask_volume = min(ask_volume, 300 + observation['code_net_position'], 20)
         if ask_volume > 0:
             return [[0, 0, 1], float(ask_volume), ask_price]  # 以ask_price价格卖出ask_volume手
 
@@ -136,7 +152,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 bid_volume += observation[f'av{i}']
             else:
                 break
-        bid_volume = min(bid_volume, 300 - observation['code_net_position'])
+        bid_volume = min(bid_volume, 300 - observation['code_net_position'], 20)
         if bid_volume > 0:
             return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
 
@@ -229,12 +245,20 @@ if __name__ == '__main__':
     parser.add_argument("--max-cache-len", type=int, default=5)
     parser.add_argument("--basic-state-dim", type=int, default=3)
     parser.add_argument("--cache-single-dim", type=int, default=3)
+    parser.add_argument("--state-keys", type=list, default=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4'))
 
     args = parser.parse_args()
 
     env_type = "kafang_stock"
     env = make(env_type, seed=None)
     test_env = make(env_type, seed=None)
+
+    cache_single_dim = len(args.state_keys)
+    basic_state_dim = 2
+    if args.SRR:
+        cache_single_dim += 5
+        basic_state_dim += 1
+    state_dim = args.max_cache_len * cache_single_dim + basic_state_dim
 
     trainer = MarketmakingTrainer(state_dim=(args.max_cache_len - 1) * args.cache_single_dim + args.basic_state_dim + 1,
                                   critic_mlp_hidden_size=args.critic_mlp_hidden_size,
@@ -250,7 +274,8 @@ if __name__ == '__main__':
                                   test_env=test_env,
                                   replay_buffer_capacity=args.replay_buffer_capacity,
                                   device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-                                  max_cache_len=args.max_cache_len
+                                  max_cache_len=args.max_cache_len,
+                                  state_keys=args.state_keys
                                   # device=torch.device("cpu")
                                   )
 
