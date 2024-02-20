@@ -4,8 +4,15 @@ from RL_train.basicSACTrainer import basicSACMarketmakingTrainer
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter
 import os
+import random
+from collections import deque
 
-
+def setup_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
 class ObservesCollect:
     def __init__(self, maxlen=5, keys=('signal0', 'signal1', 'signal2'), SRR=False):
         self.cache = deque(maxlen=maxlen)
@@ -243,15 +250,18 @@ if __name__ == '__main__':
     parser.add_argument("--soft-tau", type=float, default=0.005)
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--max-cache-len", type=int, default=5)
-    parser.add_argument("--basic-state-dim", type=int, default=3)
-    parser.add_argument("--cache-single-dim", type=int, default=3)
     parser.add_argument("--state-keys", type=list, default=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4'))
+    parser.add_argument("--SRR", type=bool, default=False)
+    parser.add_argument("--seed", type=int, default=None)
 
     args = parser.parse_args()
 
+    # 设置随机数种子
+    setup_seed(args.seed)
+
     env_type = "kafang_stock"
-    env = make(env_type, seed=None)
-    test_env = make(env_type, seed=None)
+    env = make(env_type, seed=args.seed)
+    test_env = make(env_type, seed=args.seed)
 
     cache_single_dim = len(args.state_keys)
     basic_state_dim = 2
@@ -260,7 +270,7 @@ if __name__ == '__main__':
         basic_state_dim += 1
     state_dim = args.max_cache_len * cache_single_dim + basic_state_dim
 
-    trainer = MarketmakingTrainer(state_dim=(args.max_cache_len - 1) * args.cache_single_dim + args.basic_state_dim + 1,
+    trainer = MarketmakingTrainer(state_dim=state_dim,
                                   critic_mlp_hidden_size=args.critic_mlp_hidden_size,
                                   actor_mlp_hidden_size=args.actor_mlp_hidden_size,
                                   log_alpha=args.log_alpha,
