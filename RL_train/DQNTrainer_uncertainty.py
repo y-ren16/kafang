@@ -362,7 +362,7 @@ class PrioritizedExperienceReplay(object):
 class DQNTrainer_uncertainty:
     def __init__(self, state_dim, critic_mlp_hidden_size, critic_lr, gamma, soft_tau,
                  env, test_env, replay_buffer_capacity, device, priorities_coefficient=1, priorities_bias=1,
-                 max_cache_len=5, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0'), num_ensemble=7, beta=.0):
+                 max_cache_len=5, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4'), num_ensemble=7, beta=.0):
         action_dim = 11  # 0-4：买入，5：不做：6-10：卖出
 
         self.critic = ensembleQNetwork(state_dim=state_dim,
@@ -472,7 +472,8 @@ class DQNTrainer_uncertainty:
         # for q_net in self.critic.Qs:
         #     critic_loss += (q_net(state)[torch.arange(batch_size), action] - target_q) ** 2
         critic_loss = torch.sum((self.critic(state)[:, torch.arange(batch_size), action] - target_q.unsqueeze(0).expand(self.num_ensemble, -1)) ** 2, dim=0)
-        # if torch.isnan(critic_loss).any():
+        if torch.isnan(critic_loss).any():
+            print(1)
         #     print('critic_loss:', critic_loss)
         #     import pdb
         #     pdb.set_trace()
@@ -598,7 +599,7 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--max-cache-len", type=int, default=1)
     parser.add_argument("--SRR", type=bool, default=False)
-    parser.add_argument("--seed", type=int, default=20)
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--noise-dumping", type=float, default=0.99)
     parser.add_argument("--init-noise", type=float, default=0.5)
     parser.add_argument("--priorities-coefficient", type=float, default=0.5)
@@ -614,7 +615,7 @@ if __name__ == '__main__':
     env = make(env_type, seed=args.seed)
     test_env = make(env_type, seed=args.seed)
 
-    cache_single_dim = 5
+    cache_single_dim = 13
     basic_state_dim = 3
     if args.SRR:
         cache_single_dim += 5
