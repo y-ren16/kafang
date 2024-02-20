@@ -1,4 +1,5 @@
 from envs.utils import Order
+from DQN.submission import my_controller
 
 
 def rl_policy(args, model, obs, info):
@@ -27,4 +28,13 @@ def base_taker_policy(obs, info):
     else:
         order = Order(side=1, price=0, volume=0)
 
+    return order
+
+def rl_policy(obs, info):
+    all_observes = {}
+    all_observes['observation'] = obs
+    side, volume, price = my_controller(all_observes, None, False)
+    # one hot to int
+    side = side.index(1)
+    order = Order(side=side, price=price, volume=volume)
     return order

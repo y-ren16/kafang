@@ -1,9 +1,13 @@
-from backtest.policies import base_taker_policy
+from backtest.policies import base_taker_policy, rl_policy
 from backtest.utils import time_format_conversion
 from envs.utils import Order
+from envs.stock_base_env_cython import StockBaseEnvCython
+from mock_market_common.mock_market_data_cython import MockMarketDataCython
 
 
-def backtest_oneday(environment, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas):
+def backtest_oneday(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas):
+    mock_market_data = MockMarketDataCython(df)
+    environment = StockBaseEnvCython(date, code_list, mock_market_data)
     obs, done, info = environment.reset()
     while True:
 
@@ -24,7 +28,8 @@ def backtest_oneday(environment, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY
                 else:
                     order = Order(side=1, volume=0, price=0)
         else:
-            order = base_taker_policy(obs, info)
+            # order = base_taker_policy(obs, info)
+            order = rl_policy(obs, info)
             # if order.side != 1:
             #     print(order)
 
@@ -42,4 +47,4 @@ def backtest_oneday(environment, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY
     backtest_datas.append(environment.get_backtest_metric())
 
     # # Save the back test information locally
-    # environment.dump(f"{logdir}/backtest_{backtest_mode}/{environment.date}.json")
+    environment.dump(f"{logdir}/backtest_{backtest_mode}/{environment.date}.json")

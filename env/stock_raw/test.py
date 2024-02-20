@@ -38,7 +38,9 @@ def backtest(logdir, TEST_WHITE_CORE_STRATEGY):
         dateList = [name for name in os.listdir(signal_file_original_rootpath) if
                     os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
         dateList.sort()
-
+        print(dateList)
+        backtest_datas = multiprocessing.Manager().list()
+        processes = []
         envs = []
         for date in dateList[:]:
             file.filename = "./data/" + date + '/train_data.parquet'
@@ -51,13 +53,8 @@ def backtest(logdir, TEST_WHITE_CORE_STRATEGY):
             mock_market_data = MockMarketDataCython(df)
             env = StockBaseEnvCython(date, code_list, mock_market_data)
             envs.append(env)
-
-        backtest_datas = multiprocessing.Manager().list()
-        processes = []
-        for environment in envs:
-            process = multiprocessing.Process(target=backtest_oneday,
-                                              args=(environment, logdir, backtest_mode,
-                                                    TEST_WHITE_CORE_STRATEGY, backtest_datas))
+            process = multiprocessing.Process(target=backtest_oneday, args=(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas))
+            # backtest_oneday(environment, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas)
             processes.append(process)
 
         for process in processes:
@@ -78,10 +75,11 @@ def backtest(logdir, TEST_WHITE_CORE_STRATEGY):
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn', force=True)
     print('Start backtesting...')
     TEST_WHITE_CORE_STRATEGY = True
     if TEST_WHITE_CORE_STRATEGY:
-        logdir = "./backtest/basic_policy_log/"
+        logdir = "./backtest/basic_policy_log_29/"
     else:
         # TODO:Add code to test your reinforcement learning model
         pass
