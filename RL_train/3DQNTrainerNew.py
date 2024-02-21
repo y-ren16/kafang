@@ -181,7 +181,7 @@ class DQNTrainer(basicDiscreteTrainer):
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
-    def RL_train(self, save_dir, rl_step, batch_size, init_noise=0.5, noise_dumping=0.99):
+    def RL_train(self, save_dir, start_step, rl_step, batch_size, init_noise=0.5, noise_dumping=0.99):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -193,7 +193,7 @@ class DQNTrainer(basicDiscreteTrainer):
         self.test_env.reset()
         state = self.extract_state(all_observes)
         noise = init_noise
-        for i in range(int(rl_step) + 1):
+        for i in range(start_step, int(rl_step) + 1):
             # print(i)
             # if i == -199076:
             #     print(i)
@@ -302,8 +302,24 @@ if __name__ == '__main__':
                          max_cache_len=args.max_cache_len
                          # device=torch.device("cpu")
                          )
-
+    
+    model_save_dir = os.path.join(args.save_dir, 'models')
+    model_files = [f for f in os.listdir(model_save_dir) if f.endswith('.pt')]
+    if model_files:
+        # 找到最新的模型文件
+        latest_model_file = max(model_files, key=lambda x: os.path.getctime(os.path.join(model_save_dir, x)))
+        model_path = os.path.join(model_save_dir, latest_model_file)
+        print(f"Loading the latest model file: {model_path}")
+        # 假设你的trainer有一个加载模型的方法load_model
+        trainer.load_RL_part(model_path)
+        start_step = int(latest_model_file.split('_')[-1].split('k')[0]) * 1000
+        print(start_step)
+    else:
+        print("No model file found, starting training from scratch.")
+        start_step = 0
+    
     trainer.RL_train(save_dir=args.save_dir,
+                     start_step=start_step,
                      rl_step=args.rl_step,
                      batch_size=args.batch_size,
                      init_noise=0.5
