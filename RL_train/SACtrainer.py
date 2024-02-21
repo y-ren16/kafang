@@ -143,8 +143,8 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             observation = observation[0]
         if 'observation' in observation.keys():
             observation = observation['observation']
-        bid_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.005 + 1) / (1 + 0.00007 + 0.00001)  # 计划买入价
-        ask_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.005 + 1) * (1 + 0.00007 + 0.00001)  # 计划卖出价
+        bid_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) / (1 + 0.00007 + 0.00001)  # 计划买入价
+        ask_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) * (1 + 0.00007 + 0.00001)  # 计划卖出价
         # 仅考虑以bp0价位卖出，不考虑bp1、bp2、bp3、bp4
         if ask_price <= observation[f'bp0']:
             ask_volume = observation[f'bv0']
