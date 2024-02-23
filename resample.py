@@ -3,7 +3,7 @@ import os
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-
+import torch
 
 # import pdb
 
@@ -121,32 +121,33 @@ if __name__ == "__main__":
         file.load()
         df_ori = file.data
         code_list = df_ori['code'].unique()
+        torch.save(code_list, os.path.join(stock_path, "data_resampled", date, 'code_list.pt'))
         print(len(code_list))
         # assert len(code_list) == 496
         # assert len(code_list) == 100
-        code_nums_each = []
-        for code in tqdm(code_list):
-            df = df_ori[df_ori['code'] == code]
-            code_nums_each.append(len(df))
-            # start_time = 93000000.0
-            # end_time = 145900000.0
-            try:
-                df.iloc[0]["serverTime"] > 93000000.0
-            except:
-                print(df.iloc[0]["serverTime"])
-                print(code)
-
-            # assert df.iloc[-1]["serverTime"] < 145900000.0
-
-            # resampled df ever 5 seconds
-            # df_resampled = df_resample(df, sampling_interval=5000.0, on='serverTime')
-            df_resampled = vectorized_resample(df, sampling_interval=5, on='eventTime')
-
-            new_file = ParquetFile()
-            new_file.filename = os.path.join(stock_path,
-                                             "./data_resampled/" + date + '/train_data_' + str(int(code)) + '.parquet')
-            new_file.data = df_resampled
-            new_file.dump()
-            continue
-        assert sum(code_nums_each) == len(df_ori)
+        # code_nums_each = []
+        # for code in tqdm(code_list):
+        #     df = df_ori[df_ori['code'] == code]
+        #     code_nums_each.append(len(df))
+        #     # start_time = 93000000.0
+        #     # end_time = 145900000.0
+        #     try:
+        #         df.iloc[0]["serverTime"] > 93000000.0
+        #     except:
+        #         print(df.iloc[0]["serverTime"])
+        #         print(code)
+        #
+        #     # assert df.iloc[-1]["serverTime"] < 145900000.0
+        #
+        #     # resampled df ever 5 seconds
+        #     # df_resampled = df_resample(df, sampling_interval=5000.0, on='serverTime')
+        #     df_resampled = vectorized_resample(df, sampling_interval=5, on='eventTime')
+        #
+        #     new_file = ParquetFile()
+        #     new_file.filename = os.path.join(stock_path,
+        #                                      "./data_resampled/" + date + '/train_data_' + str(int(code)) + '.parquet')
+        #     new_file.data = df_resampled
+        #     new_file.dump()
+        #     continue
+        # assert sum(code_nums_each) == len(df_ori)
         continue

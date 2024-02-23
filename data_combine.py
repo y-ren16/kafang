@@ -2,6 +2,8 @@ from env.stock_raw.backtest.utils import ParquetFile  # 假设这是有效的导
 import os
 import pandas as pd
 from tqdm import tqdm
+import torch
+
 
 stock_path = "./env/stock_raw"
 signal_file_original_rootpath = os.path.join(stock_path, 'data_resampled')
@@ -17,17 +19,23 @@ for date in tqdm(dateList):
         continue
     
     all_dfs = []  # 用于存储当天所有股票数据的列表
-    for file_code in os.listdir(os.path.join(stock_path, "data_resampled", date)):
-        if len(file_code.split(".")[0])==10:
-            print("skip", file_code)
-            continue
-        if file_code.endswith(".parquet"):
-            code = file_code.split(".")[0][11:]
-            # print(code)
-            # continue
-            file_path = os.path.join(stock_path, "data_resampled", date, file_code)
-            df = pd.read_parquet(file_path)  # 直接加载Parquet文件为DataFrame
-            all_dfs.append(df)
+    code_list = torch.load(os.path.join(stock_path, "data_resampled", date, 'code_list.pt'))
+    for code in code_list:
+        file_path = os.path.join(stock_path, "data_resampled", date, f'train_data_{code:.0f}.parquet')
+        df = pd.read_parquet(file_path)  # 直接加载Parquet文件为DataFrame
+        all_dfs.append(df)
+
+    # for file_code in os.listdir(os.path.join(stock_path, "data_resampled", date)):
+    #     if len(file_code.split(".")[0]) == 10:
+    #         print("skip", file_code)
+    #         continue
+    #     if file_code.endswith(".parquet"):
+    #         code = file_code.split(".")[0][11:]
+    #         # print(code)
+    #         # continue
+    #         file_path = os.path.join(stock_path, "data", date, file_code)
+    #         df = pd.read_parquet(file_path)  # 直接加载Parquet文件为DataFrame
+    #         all_dfs.append(df)
     
     if all_dfs:
         # 合并当天所有股票数据的DataFrame
