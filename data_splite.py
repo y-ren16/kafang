@@ -6,7 +6,7 @@ signal_file_original_rootpath = os.path.join(stock_path, 'data')
 dateList = [name for name in os.listdir(signal_file_original_rootpath) if
                     os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
 print(dateList)
-for date in tqdm(dateList[:1]):
+for date in tqdm(dateList[:]):
     file = ParquetFile()
     file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
     file.load()

@@ -3,12 +3,14 @@ import os
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
+
+
 # import pdb
 
 def generate_sample_times_optimized(start_time, end_time, interval_in_seconds):
     """
     优化生成采样时间点列表，使用pandas处理时间序列。
-    
+
     :param start_time: 开始时间，格式为HHMMSSmmm，例如93000000表示9:30:00.000。
     :param end_time: 结束时间，相同的格式。
     :param interval_in_seconds: 采样间隔，以秒为单位。
@@ -17,17 +19,17 @@ def generate_sample_times_optimized(start_time, end_time, interval_in_seconds):
     # 转换开始和结束时间为pandas的时间戳
     start_timestamp = pd.to_datetime(str(int(start_time)), format='%H%M%S%f')
     end_timestamp = pd.to_datetime(str(int(end_time)), format='%H%M%S%f')
-    
+
     # 生成规则的时间序列
     time_range = pd.date_range(start=start_timestamp, end=end_timestamp, freq=f'{interval_in_seconds}S')
-    
+
     # 转换时间序列为特定格式
     sample_times = [float(time.strftime('%H%M%S%f')[:-3]) for time in time_range]
-    
+
     return sample_times
 
 
-def vectorized_resample(df, sampling_interval, on='serverTime'):
+def vectorized_resample(df, sampling_interval, on='eventTime'):
     # 创建采样时间点
     start_time = 93000000.0
     end_time = df[on].iloc[-1]
@@ -35,7 +37,7 @@ def vectorized_resample(df, sampling_interval, on='serverTime'):
     # sample_times = np.arange(start_time, end_time, sampling_interval)
     sample_times = generate_sample_times_optimized(start_time, end_time, sampling_interval)
     sample_times = np.array(sample_times)
-    
+
     # 找到每个采样时间点最接近的索引
     indices = np.searchsorted(df[on], sample_times, side="left")
     indices_le = indices - 1
@@ -51,20 +53,20 @@ def vectorized_resample(df, sampling_interval, on='serverTime'):
     dist_to_indices = np.abs(df_on_values[indices] - sample_times)
     indices = np.where(dist_to_le < dist_to_indices, indices_le, indices)
 
-    
     # 选取最接近采样时间点的行
     resampled_df = df.iloc[indices].copy()
     resampled_df.reset_index(drop=True, inplace=True)
-    
+
     return resampled_df
 
-def df_resample(df, sampling_interval, on='serverTime'):
+
+def df_resample(df, sampling_interval, on='eventTime'):
     # 生成采样点时间戳
     start_time = 93000000.0
     end_time = df[on].iloc[-1]
     sample_times = np.arange(start_time, end_time, sampling_interval)
     # print(len(sample_times))
-    
+
     # 准备采样结果容器
     sampled_indices = []
     current_sample_index = 0
@@ -97,23 +99,25 @@ def df_resample(df, sampling_interval, on='serverTime'):
 
     # 重置索引
     resampled_df.reset_index(drop=True, inplace=True)
-    
+
     return resampled_df
+
 
 if __name__ == "__main__":
     stock_path = "./env/stock_raw"
-    signal_file_original_rootpath = os.path.join(stock_path, 'data')
+    signal_file_original_rootpath = os.path.join(stock_path, 'data1')
     dateList = [name for name in os.listdir(signal_file_original_rootpath) if
-                        os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
+                os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
     print(dateList)
     os.makedirs(os.path.join(stock_path, "./data_resampled"), exist_ok=True)
-    for date in tqdm(dateList[:1]):
+    for date in tqdm(dateList[:]):
+    # for date in ['20200102']:
         print(date)
         if date == '20200225' or date == '20200224' or date == '20200221' or date == '20200220':
             continue
         file = ParquetFile()
         os.makedirs(os.path.join(stock_path, "./data_resampled/" + date), exist_ok=True)
-        file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
+        file.filename = os.path.join(stock_path, "./data1/" + date + '/train_data.parquet')
         file.load()
         df_ori = file.data
         code_list = df_ori['code'].unique()
@@ -126,7 +130,7 @@ if __name__ == "__main__":
             code_nums_each.append(len(df))
             # start_time = 93000000.0
             # end_time = 145900000.0
-            try: 
+            try:
                 df.iloc[0]["serverTime"] > 93000000.0
             except:
                 print(df.iloc[0]["serverTime"])
@@ -136,10 +140,11 @@ if __name__ == "__main__":
 
             # resampled df ever 5 seconds
             # df_resampled = df_resample(df, sampling_interval=5000.0, on='serverTime')
-            df_resampled = vectorized_resample(df, sampling_interval=5, on='serverTime')
+            df_resampled = vectorized_resample(df, sampling_interval=5, on='eventTime')
 
             new_file = ParquetFile()
-            new_file.filename = os.path.join(stock_path, "./data_resampled/" + date + '/train_data_' + str(int(code)) + '.parquet')
+            new_file.filename = os.path.join(stock_path,
+                                             "./data_resampled/" + date + '/train_data_' + str(int(code)) + '.parquet')
             new_file.data = df_resampled
             new_file.dump()
             continue

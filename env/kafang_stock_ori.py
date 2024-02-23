@@ -38,7 +38,7 @@ class KaFangStockOri(Game):
         self.dateList = [name for name in os.listdir(signal_file_original_rootpath) if
                     os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
         self.dateList.sort()
-        for date in self.dateList[-4:]:
+        for date in self.dateList[:]:
             file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
             file.load()
             df = file.data
@@ -252,4 +252,3 @@ class KaFangStockOri(Game):
             stats['daily_pnl_mean_sharped'] = stats['day_pnl_mean']
 
         self.stats = stats
-

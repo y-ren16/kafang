@@ -40,7 +40,7 @@ class KaFangStock(Game):
             self.dateList.sort()
         else:
             self.dateList = dataList
-
+        # self.dateList = ['20200102', '20200103']
         self.init_info = ''
         self.done = False
         self.step_cnt = 0

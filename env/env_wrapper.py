@@ -88,7 +88,7 @@ class env_with_reward(KaFangStock):
             self.compute_final_stats()
             self.set_n_return()
 
-        return self.all_observes, reward, done>0, self.info_his, ''
+        return self.all_observes, reward, done>0, self.info_his[-1], ''
 
     def compute_reward(self):
         pass
