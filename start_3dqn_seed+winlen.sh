@@ -6,12 +6,12 @@ critic_lr=0.0003
 seeds=(0 1)
 gpu_idx=0
 mkdir -p ./trainlog_3DQN
-mkdir -p ./trainlog_3DQN/seed
-mkdir -p ./output
-mkdir -p ./output/3dqn_seed
+mkdir -p ./trainlog_3DQN/seed+winlen
+mkdir -p ./output_3DQN
+mkdir -p ./output_3DQN/seed+winlen
 for seed in ${seeds[@]}; do
     for winlen in ${winlens[@]}; do
-        CUDA_VISIBLE_DEVICES=${gpu[gpu_idx]} python -u RL_train/3DQNTrainer.py --save-dir ./output/3dqn_seed/3DQN_winlen${winlen}_critic-lr${critic_lr}_seed${seed} --max-cache-len $winlen --critic-lr $critic_lr --seed $seed > ./trainlog_3DQN/seed/log_3dqn_winlen${winlen}_critic-lr${critic_lr}_seed${seed}.txt 2>&1 &
+        CUDA_VISIBLE_DEVICES=${gpu[gpu_idx]} python -u RL_train/3DQNTrainer.py --save-dir ./output_3DQN/seed+winlen/3DQN_winlen${winlen}_critic-lr${critic_lr}_seed${seed} --max-cache-len $winlen --critic-lr $critic_lr --seed $seed > ./trainlog_3DQN/seed+winlen/log_3dqn_winlen${winlen}_critic-lr${critic_lr}_seed${seed}.txt 2>&1 &
         gpu_idx=$((gpu_idx+1))
         if [ $gpu_idx -ge ${#gpu[@]} ]; then
             gpu_idx=0

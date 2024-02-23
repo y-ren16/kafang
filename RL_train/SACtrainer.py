@@ -198,7 +198,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             self.soft_update_target_critic()
             logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
-                logger['test_reward_mean'] = self.RL_test(test_length=10000)
+                logger['test_reward_mean'] = self.RL_test(test_length=100000)
 
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
@@ -264,7 +264,7 @@ if __name__ == '__main__':
 
     env_type = "kafang_stock"
     env = make(env_type, seed=args.seed)
-    test_env = make(env_type, seed=args.seed)
+    test_env = make(env_type, seed=args.seed + 1)
 
     cache_single_dim = len(args.state_keys)
     basic_state_dim = 2
