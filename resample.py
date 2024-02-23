@@ -34,7 +34,7 @@ def vectorized_resample(df, sampling_interval, on='eventTime'):
     start_time = 93000000.0
     stop_time = 113000000.0
     begain_time = 130000000.0
-    end_time = 145900000.0
+    end_time = 150000000.0
     
     
     sample_times1 = generate_sample_times_optimized(start_time, stop_time, sampling_interval)
