@@ -65,7 +65,7 @@ class env_with_reward(KaFangStock):
         if done == 2:
             # print(1)
             # self.last_pnl = (obs['code'], obs['code_pnl'])
-            print(obs)
+            # print(obs)
             obs, _, info = self.env_core.reset()  # reset到下一只股票
             self.info_his = [info]
             self.all_observes = [{"observation": obs, "new_game": False}]
