@@ -34,7 +34,7 @@ def vectorized_resample(df, sampling_interval, on='eventTime'):
     start_time = 93000000.0
     stop_time = 113000000.0
     begain_time = 130000000.0
-    end_time = 150000000.0
+    end_time = df[on].iloc[-1]
     
     
     sample_times1 = generate_sample_times_optimized(start_time, stop_time, sampling_interval)
@@ -53,9 +53,13 @@ def vectorized_resample(df, sampling_interval, on='eventTime'):
     df_on_values = df[on].values  # 获取Series的numpy数组表示
     # 计算距离并选择最近的索引
     # 使用numpy数组进行计算，避免pandas索引不匹配的问题
-    dist_to_le = np.abs(sample_times - df_on_values[indices_le])
-    dist_to_indices = np.abs(df_on_values[indices] - sample_times)
-    indices = np.where(dist_to_le < dist_to_indices, indices_le, indices)
+    try:
+        dist_to_le = np.abs(sample_times - df_on_values[indices_le])
+        dist_to_indices = np.abs(df_on_values[indices] - sample_times)
+        indices = np.where(dist_to_le < dist_to_indices, indices_le, indices)
+    except:
+        import pdb
+        pdb.set_trace()
 
     # 选取最接近采样时间点的行
     resampled_df = df.iloc[indices].copy()
