@@ -152,6 +152,7 @@ class DQNTrainer(basicDiscreteTrainer):
             bid_volume = int(observation['av0'] * min(observation['signal0'], 1) * alpha)
             bid_volume = max(0, bid_volume)
             bid_volume = min(bid_volume, 300 - observation['code_net_position'])
+            # bid_volume = min(bid_volume, 20)
             if bid_volume > 0:
                 return [[1, 0, 0], float(bid_volume), bid_price]
         elif action == 2:
@@ -159,6 +160,7 @@ class DQNTrainer(basicDiscreteTrainer):
             ask_volume = int(observation['bv0'] * max(observation['signal0'], -1) * -1 * alpha)
             ask_volume = max(0, ask_volume)
             ask_volume = min(ask_volume, 300 + observation['code_net_position'])
+            # ask_volume = min(ask_volume, 20)
             if ask_volume > 0:
                 return [[0, 0, 1], float(ask_volume), ask_price]
 
@@ -304,6 +306,8 @@ if __name__ == '__main__':
                          )
     
     model_save_dir = os.path.join(args.save_dir, 'models')
+    if not os.path.exists(model_save_dir):
+        os.makedirs(model_save_dir)
     model_files = [f for f in os.listdir(model_save_dir) if f.endswith('.pt')]
     if model_files:
         # 找到最新的模型文件
