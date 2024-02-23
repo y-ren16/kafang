@@ -152,6 +152,7 @@ class DQNTrainer(basicDiscreteTrainer):
             bid_volume = int(observation['av0'] * min(observation['signal0'], 1) * alpha)
             bid_volume = max(0, bid_volume)
             bid_volume = min(bid_volume, 300 - observation['code_net_position'])
+            # bid_volume = min(bid_volume, 20)
             if bid_volume > 0:
                 return [[1, 0, 0], float(bid_volume), bid_price]
         elif action == 2:
@@ -159,6 +160,7 @@ class DQNTrainer(basicDiscreteTrainer):
             ask_volume = int(observation['bv0'] * max(observation['signal0'], -1) * -1 * alpha)
             ask_volume = max(0, ask_volume)
             ask_volume = min(ask_volume, 300 + observation['code_net_position'])
+            # ask_volume = min(ask_volume, 20)
             if ask_volume > 0:
                 return [[0, 0, 1], float(ask_volume), ask_price]
 
@@ -215,7 +217,7 @@ class DQNTrainer(basicDiscreteTrainer):
             logger.update(self.critic_train_step(batch_size))
             self.soft_update_target_critic()
             if i % 10000 == 0:
-                logger['test_reward_mean'] = self.RL_test(test_length=10000)
+                logger['test_reward_mean'] = self.RL_test(test_length=100000)
                 if i > 0:
                     logger['noise'] = noise
                     noise *= noise_dumping
@@ -281,7 +283,7 @@ if __name__ == '__main__':
     
     env_type = "kafang_stock"
     env = make(env_type, seed=args.seed)
-    test_env = make(env_type, seed=args.seed)
+    test_env = make(env_type, seed=args.seed + 1)
 
     cache_single_dim = 3
     basic_state_dim = 3
@@ -304,6 +306,8 @@ if __name__ == '__main__':
                          )
     
     model_save_dir = os.path.join(args.save_dir, 'models')
+    if not os.path.exists(model_save_dir):
+        os.makedirs(model_save_dir)
     model_files = [f for f in os.listdir(model_save_dir) if f.endswith('.pt')]
     if model_files:
         # 找到最新的模型文件
