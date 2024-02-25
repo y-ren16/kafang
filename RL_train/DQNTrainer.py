@@ -166,7 +166,7 @@ class DQNTrainer(basicDiscreteTrainer):
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
-    def RL_train(self, save_dir, rl_step, batch_size, init_noise=0.5, noise_dumping=0.99):
+    def RL_train(self, save_dir, rl_step, batch_size, init_noise=0.5, noise_dumping=0.99, sample_num=10):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -182,19 +182,20 @@ class DQNTrainer(basicDiscreteTrainer):
             # print(i)
             # if i == -199076:
             #     print(i)
-            if random.random() < noise:
-                action = random.randint(0, self.action_dim - 1)
-            else:
-                action = self.get_action(state=torch.FloatTensor(state).to(self.device)).item()
-            decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
-            all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
-            next_state = self.extract_state(all_observes)
-            self.replay_buffer.push(state, action, reward, next_state, done)
-            if self.env.done:
-                all_observes = self.env.reset()
-                state = self.extract_state(all_observes)
-            else:
-                state = next_state
+            for _ in range(sample_num):
+                if random.random() < noise:
+                    action = random.randint(0, self.action_dim - 1)
+                else:
+                    action = self.get_action(state=torch.FloatTensor(state).to(self.device)).item()
+                decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
+                all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
+                next_state = self.extract_state(all_observes)
+                self.replay_buffer.push(state, action, reward, next_state, done)
+                if self.env.done:
+                    all_observes = self.env.reset()
+                    state = self.extract_state(all_observes)
+                else:
+                    state = next_state
 
             logger = {}
             logger.update(self.critic_train_step(batch_size))

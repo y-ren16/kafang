@@ -6,6 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 import random
 from collections import deque
+import torch.nn.functional as F
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -104,6 +105,8 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         action_dim = 1  # 动作空间为股票估值
         self.observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
         self.test_observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
+        self.state_keys = state_keys
+        self.max_cache_len = max_cache_len
 
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device)
@@ -143,8 +146,8 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             observation = observation[0]
         if 'observation' in observation.keys():
             observation = observation['observation']
-        bid_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) / (1 + 0.00007 + 0.00001)  # 计划买入价
-        ask_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) * (1 + 0.00007 + 0.00001)  # 计划卖出价
+        bid_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) # / (1 + 0.00007 + 0.00001)  # 计划买入价
+        ask_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) # * (1 + 0.00007 + 0.00001)  # 计划卖出价
         # 仅考虑以bp0价位卖出，不考虑bp1、bp2、bp3、bp4
         if ask_price <= observation[f'bp0']:
             ask_volume = observation[f'bv0']
@@ -167,7 +170,27 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
 
         return [[0, 1, 0], 0., 0.]  # 什么都不做
 
-    def RL_train(self, save_dir, train_step, batch_size):
+    def imitate_step(self, batch_size):
+        state, _, _, _, _ = self.replay_buffer.sample(min(batch_size, len(self.replay_buffer)))
+        state = torch.FloatTensor(state).to(self.device)
+        with torch.no_grad():
+            signal0 = state[:, (self.state_keys.index('signal0')+1)*self.max_cache_len-1:(self.state_keys.index('signal0')+1)*self.max_cache_len]
+            target_action = 0.2 * signal0 * (abs(signal0) > 0.8)
+
+        action_mean, action_log_std = self.actor(state)
+
+        imitate_loss = F.mse_loss(action_mean, target_action)
+
+        self.actor_optimizer.zero_grad()
+        imitate_loss.backward()
+        self.actor_optimizer.step()
+
+        logger = {
+            'actor_loss': imitate_loss.item()
+        }
+        return logger
+
+    def RL_train(self, save_dir, rl_step, imitate_step, batch_size):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -179,7 +202,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         self.test_env.reset()
         state = self.observes_collect.extract_state(all_observes)
 
-        for i in range(int(train_step) + 1):
+        for i in range(-int(imitate_step), int(rl_step) + 1):
             action = self.actor.get_action(state=torch.FloatTensor(state).to(self.device))
             decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
             all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
@@ -196,7 +219,10 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             logger = {}
             logger.update(self.critic_train_step(batch_size))
             self.soft_update_target_critic()
-            logger.update(self.actor_train_step(batch_size))
+            if i < 0:
+                logger.update(self.imitate_step(batch_size))
+            else:
+                logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
                 logger['test_reward_mean'] = self.RL_test(test_length=100000)
 
@@ -218,7 +244,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             # state = self.extract_state(all_observes)
             # while not self.test_env.done:
             state = torch.FloatTensor(state).to(self.device)
-            action = self.actor.get_action(state)
+            action = self.actor.get_action(state, random_flag=False)
             decoupled_action = self.decouple_action(action=action,
                                                     observation=all_observes[0])
             all_observes, reward, done, info_before, info_after = self.test_env.step([decoupled_action])
@@ -238,8 +264,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
-                        default='/devdata1/lhdata/kafang/test')
+                        default='/devdata1/lhdata/kafang/SAC/win1')
     parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
+    parser.add_argument("--imitate-step", type=float, help="steps for RL", default=5e5)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
                         default=512)
     parser.add_argument("--actor-mlp-hidden-size", type=int, help="number of hidden units per layer in actor",
@@ -293,6 +320,7 @@ if __name__ == '__main__':
                                   )
 
     trainer.RL_train(save_dir=args.save_dir,
-                     train_step=args.rl_step,
+                     rl_step=args.rl_step,
+                     imitate_step=args.imitate_step,
                      batch_size=args.batch_size
                      )

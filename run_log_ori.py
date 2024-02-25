@@ -121,7 +121,7 @@ def run_game(g, env_name, multi_part_agent_ids, actions_spaces, policy_list, ren
     all_observes = g.all_observes
     while not g.is_terminal():
         step = "step%d" % g.step_cnt
-        if g.step_cnt % 10 == 0:
+        if g.step_cnt % 1000 == 0:
             print(step)
 
         if render_mode and hasattr(g, "env_core"):
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     render_mode = True
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--my_ai", default="DQN", help="random/rule/sac")
+    parser.add_argument("--my_ai", default="sac", help="random/rule/sac")
     args = parser.parse_args()
 
     # policy_list = ["random"] * len(game.agent_nums)

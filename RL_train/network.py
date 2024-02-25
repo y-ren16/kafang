@@ -97,17 +97,19 @@ class GaussianPolicyNetwork(nn.Module):
         log_prob = normal.log_prob(z) - torch.log(1 - action.pow(2) + epsilon)
         return log_prob
 
-    def get_action(self, state, dtype='ndarray'):
+    def get_action(self, state, dtype='ndarray', random_flag=True):
         # if not isinstance(state, torch.Tensor):
         #     state = torch.FloatTensor(state).to(self.device)
         # if len(state.shape) == 1:
         #     state = state.unsqueeze(0)
         mean, log_std = self.forward(state)
+        if random_flag:
+            std = log_std.exp()
+            normal = Normal(mean, std)
 
-        std = log_std.exp()
-        normal = Normal(mean, std)
-
-        action = torch.tanh(normal.sample())
+            action = torch.tanh(normal.sample())
+        else:
+            action = torch.tanh(mean)
         if dtype == 'ndarray':
             action = action.detach().cpu().numpy()
         return action

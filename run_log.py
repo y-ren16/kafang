@@ -154,6 +154,7 @@ def run_game(g, env_name, multi_part_agent_ids, actions_spaces, policy_list, ren
     logs = json.dumps(game_info, ensure_ascii=False, cls=NpEncoder)
     logger.info(logs)
     print('n return = ', g.n_return)
+    print('day', g.metric_list)
 
 
 def get_valid_agents():
@@ -169,7 +170,7 @@ if __name__ == "__main__":
     render_mode = True
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--my_ai", default="DQN", help="random/rule")
+    parser.add_argument("--my_ai", default="sac", help="random/rule")
     args = parser.parse_args()
 
     # policy_list = ["random"] * len(game.agent_nums)

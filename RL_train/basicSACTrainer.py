@@ -132,7 +132,7 @@ class basicSACMarketmakingTrainer:
         }
         return logger
 
-    def RL_train(self, save_dir, train_step, batch_size):
+    def RL_train(self, save_dir, train_step, imitate_step, batch_size):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
