@@ -225,7 +225,7 @@ class KaFangStock(Game):
 
         self.metric_list.append(env_metric_dataframe)
 
-        assert len(self.metric_list) == self.total_game
+        assert len(self.metric_list) == self.total_game, (len(self.metric_list), self.total_game)
 
         self.backtest_metric = pd.concat([metric for metric in self.metric_list])
 

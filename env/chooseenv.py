@@ -22,4 +22,12 @@ def make(env_type, seed=None, conf=None):
 
 if __name__ == "__main__":
     env = make("kafang_stock")
+    all_observes = env.reset()
+    while not env.done:
+        episode_reward = 0
+        step_num = 0
+        decoupled_action = ([0, 1, 0], 0., 0.)
+        all_observes, reward, done, info_before, info_after = env.step([decoupled_action])
+        episode_reward += reward
+        step_num += 1
     print(1)

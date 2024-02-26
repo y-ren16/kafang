@@ -190,7 +190,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         }
         return logger
 
-    def RL_train(self, save_dir, rl_step, imitate_step, batch_size, sample_num=10):
+    def RL_train(self, save_dir, rl_step, imitate_step, batch_size, sample_num=100):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -272,7 +272,8 @@ if __name__ == '__main__':
                         default=512)
     parser.add_argument("--actor-mlp-hidden-size", type=int, help="number of hidden units per layer in actor",
                         default=512)
-    parser.add_argument("--batch-size", type=int, help="number of samples per minibatch", default=256)
+    parser.add_argument("--sample-num", type=int, help="number of sample step", default=10)
+    parser.add_argument("--batch-size", type=int, help="number of samples per minibatch", default=1024)
     parser.add_argument("--replay-buffer-capacity", type=int, help="replay buffer size", default=1e6)
     parser.add_argument("--critic-lr", type=float, help="learning rate of critic", default=3e-4)
     parser.add_argument("--actor-lr", type=float, help="learning rate of actor", default=1e-4)
@@ -323,5 +324,6 @@ if __name__ == '__main__':
     trainer.RL_train(save_dir=args.save_dir,
                      rl_step=args.rl_step,
                      imitate_step=args.imitate_step,
-                     batch_size=args.batch_size
+                     batch_size=args.batch_size,
+                     sample_num=args.sample_num
                      )
