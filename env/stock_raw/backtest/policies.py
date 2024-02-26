@@ -1,9 +1,6 @@
 from envs.utils import Order
-from DQN.submission import my_controller
+from backtest.sac.submission import my_controller
 
-
-def rl_policy(args, model, obs, info):
-    pass
 
 def base_taker_policy(obs, info):
     x1 = 0.8

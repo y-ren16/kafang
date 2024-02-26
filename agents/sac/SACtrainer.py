@@ -1,9 +1,12 @@
 import torch
 import numpy as np
-from RL_train.basicSACTrainer import basicSACMarketmakingTrainer
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from basicSACTrainer import basicSACMarketmakingTrainer
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter
-import os
+
 import random
 from collections import deque
 import torch.nn.functional as F
@@ -225,10 +228,8 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 logger.update(self.imitate_step(batch_size))
             else:
                 logger.update(self.actor_train_step(batch_size))
-            if i == 0:
-                torch.save(self.replay_buffer, os.path.join(save_dir, 'models', 'replay_buffer_0k.pt'))
             if i % 10000 == 0:
-                logger['test_reward_mean'] = self.RL_test(test_length=10000)
+                logger['test_reward_mean'] = self.RL_test(test_length=100000)
 
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
@@ -268,7 +269,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
-                        default='/data/lhdata/kafang/SAC_test')
+                        default='/devdata1/lhdata/kafang/SAC/win1')
     parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
     parser.add_argument("--imitate-step", type=float, help="steps for RL", default=5e5)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
@@ -281,7 +282,7 @@ if __name__ == '__main__':
     parser.add_argument("--critic-lr", type=float, help="learning rate of critic", default=3e-4)
     parser.add_argument("--actor-lr", type=float, help="learning rate of actor", default=1e-4)
     parser.add_argument("--alpha-lr", type=float, help="learning rate of alpha", default=1e-4)
-    parser.add_argument("--log-alpha", type=float, help="initial alpha", default=np.log(0.0001))
+    parser.add_argument("--log-alpha", type=float, help="initial alpha", default=0.0)
     parser.add_argument("--target-entropy", type=float, help="target entropy in SAC", default=None)
     parser.add_argument("--soft-tau", type=float, default=0.005)
     parser.add_argument("--gamma", type=float, default=0.99)

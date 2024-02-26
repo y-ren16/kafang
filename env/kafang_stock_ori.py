@@ -38,7 +38,7 @@ class KaFangStockOri(Game):
         self.dateList = [name for name in os.listdir(signal_file_original_rootpath) if
                     os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
         self.dateList.sort()
-        for date in self.dateList[:]:
+        for date in self.dateList[:10]:
             file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
             file.load()
             df = file.data

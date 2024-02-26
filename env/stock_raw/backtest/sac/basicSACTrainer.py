@@ -1,6 +1,9 @@
 import torch
 from torch import optim
-from RL_train.network import MultiQNetwork, GaussianPolicyNetwork, ReplayBuffer
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from network import MultiQNetwork, GaussianPolicyNetwork, ReplayBuffer
 import copy
 import torch.nn.functional as F
 import numpy as np
@@ -75,7 +78,7 @@ class basicSACMarketmakingTrainer:
         with torch.no_grad():
             next_action, next_log_prob, _, _, _ = self.actor.evaluate(next_state)
             next_q_value = torch.min(self.target_critic(next_state, next_action), dim=0)[
-                               0] # - self.alpha * next_log_prob
+                               0] - self.alpha * next_log_prob
             target_q_value = reward + (1 - done) * self.gamma * next_q_value
 
         critic_loss = self.critic.qLoss(target_q_value, state, action, F.mse_loss)
