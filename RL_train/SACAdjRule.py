@@ -176,7 +176,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             volumn = 0
             price = 0
 
-        return [side, [volumn], [price]]
+        return [side, float(volumn), float(price)]
 
         # bid_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) # / (1 + 0.00007 + 0.00001)  # 计划买入价
         # ask_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) # * (1 + 0.00007 + 0.00001)  # 计划卖出价
@@ -210,7 +210,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             target_action = 0.2 * signal0 * (abs(signal0) > 0.8)
 
         action_mean, action_log_std = self.actor(state)
-
+        expected_new_q_value = torch.min(self.critic(state, action_mean), dim=0)[0]
         imitate_loss = F.mse_loss(action_mean, target_action)
 
         self.actor_optimizer.zero_grad()
@@ -218,7 +218,8 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         self.actor_optimizer.step()
 
         logger = {
-            'actor_loss': imitate_loss.item()
+            'actor_loss': imitate_loss.item(),
+            'expected_new_q_value': expected_new_q_value.mean().item()
         }
         return logger
 
@@ -255,8 +256,10 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 logger.update(self.imitate_step(batch_size))
             else:
                 logger.update(self.actor_train_step(batch_size))
+            if i == 0:
+                torch.save(self.replay_buffer, os.path.join(save_dir, 'models', 'replay_buffer_0k.pt'))
             if i % 10000 == 0:
-                logger['test_reward_mean'] = self.RL_test(test_length=100000)
+                logger['test_reward_mean'] = self.RL_test(test_length=10000)
 
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
@@ -308,7 +311,7 @@ if __name__ == '__main__':
     parser.add_argument("--critic-lr", type=float, help="learning rate of critic", default=3e-4)
     parser.add_argument("--actor-lr", type=float, help="learning rate of actor", default=1e-4)
     parser.add_argument("--alpha-lr", type=float, help="learning rate of alpha", default=1e-4)
-    parser.add_argument("--log-alpha", type=float, help="initial alpha", default=0.0)
+    parser.add_argument("--log-alpha", type=float, help="initial alpha", default=0.005)
     parser.add_argument("--target-entropy", type=float, help="target entropy in SAC", default=None)
     parser.add_argument("--soft-tau", type=float, default=0.005)
     parser.add_argument("--gamma", type=float, default=0.99)
