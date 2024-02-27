@@ -1,5 +1,5 @@
 from envs.utils import Order
-from backtest.SACAdjRule_3_0.submission import my_controller
+from backtest.SACAdjRule_5_0.submission import my_controller
 
 
 def base_taker_policy(obs, info):
@@ -33,9 +33,5 @@ def rl_policy(obs, info):
     side, volume, price = my_controller(all_observes, None, False)
     # one hot to int
     side = side.index(1)
-    if isinstance(volume, list):
-        volume = volume[0]
-    if isinstance(price, list):
-        price = price[0]
     order = Order(side=side, price=price, volume=volume)
     return order

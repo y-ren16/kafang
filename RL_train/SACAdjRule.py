@@ -155,7 +155,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 side = [0, 1, 0]
                 volumn = 0
                 price = 0
-            if obs['ap0'] <= price:
+            elif obs['ap0'] <= price:
                 side = [1, 0, 0]
                 volumn = min(obs['av0'], 300 - obs['code_net_position'])
                 price = price
@@ -167,7 +167,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 side = [0, 1, 0]
                 volumn = 0
                 price = 0
-            if obs['bp0'] >= price:
+            elif obs['bp0'] >= price:
                 side = [0, 0, 1]
                 volumn = min(obs['bv0'], 300 + obs['code_net_position'])
                 price = price
@@ -223,7 +223,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         }
         return logger
 
-    def RL_train(self, save_dir, rl_step, imitate_step, batch_size):
+    def RL_train(self, save_dir, rl_step, imitate_step, start_step, batch_size):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -235,7 +235,10 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         self.test_env.reset()
         state = self.observes_collect.extract_state(all_observes)
 
-        for i in range(-int(imitate_step), int(rl_step) + 1):
+        if start_step == 0:
+            start_step = -int(imitate_step)
+
+        for i in range(start_step, int(rl_step) + 1):
             action = self.actor.get_action(state=torch.FloatTensor(state).to(self.device))
             decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
             all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
@@ -353,9 +356,27 @@ if __name__ == '__main__':
                                   state_keys=args.state_keys
                                   # device=torch.device("cpu")
                                   )
+    
+    model_save_dir = os.path.join(args.save_dir, 'models')
+    if not os.path.exists(model_save_dir):
+        os.makedirs(model_save_dir)
+    model_files = [f for f in os.listdir(model_save_dir) if f.endswith('.pt')]
+    if model_files:
+        # 找到最新的模型文件
+        latest_model_file = max(model_files, key=lambda x: os.path.getctime(os.path.join(model_save_dir, x)))
+        model_path = os.path.join(model_save_dir, latest_model_file)
+        print(f"Loading the latest model file: {model_path}")
+        # 假设你的trainer有一个加载模型的方法load_model
+        trainer.load_RL_part(model_path)
+        start_step = int(latest_model_file.split('_')[-1].split('k')[0]) * 1000
+        print(start_step)
+    else:
+        print("No model file found, starting training from scratch.")
+        start_step = 0
 
     trainer.RL_train(save_dir=args.save_dir,
                      rl_step=args.rl_step,
                      imitate_step=args.imitate_step,
+                     start_step=start_step,
                      batch_size=args.batch_size
                      )
