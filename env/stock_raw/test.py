@@ -50,10 +50,10 @@ def backtest(logdir, TEST_WHITE_CORE_STRATEGY):
             for item in df['code'].unique():
                 code_list.append(float(item))
             df = np.array(df)
-            mock_market_data = MockMarketDataCython(df)
-            env = StockBaseEnvCython(date, code_list, mock_market_data)
-            envs.append(env)
-            process = multiprocessing.Process(target=backtest_oneday, args=(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas))
+            # mock_market_data = MockMarketDataCython(df)
+            # env = StockBaseEnvCython(date, code_list, mock_market_data)
+            # envs.append(env)
+            process = multiprocessing.Process(target=backtest_oneday, args=(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas, envs))
             # backtest_oneday(environment, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas)
             processes.append(process)
 

@@ -15,9 +15,9 @@ from mock_market_common.mock_market_data_cython import MockMarketDataCython
 
 
 def worker(args):
-    date, df, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas = args
+    date, df, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas, envs = args
 
-    backtest_oneday(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas)
+    backtest_oneday(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas, envs)
 
 
 def backtest(logdir, TEST_WHITE_CORE_STRATEGY):
@@ -58,9 +58,9 @@ def backtest(logdir, TEST_WHITE_CORE_STRATEGY):
             code_list = [float(item) for item in df['code'].unique()]
             df = np.array(df)
             # 为每个任务添加一组参数
-            tasks.append((date, df, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas))
+            tasks.append((date, df, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas, envs))
 
-        max_parallel = 3
+        max_parallel = 6
 
         # 使用Pool简化并行执行
         with Pool(max_parallel) as pool:
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     print('Start backtesting...')
     TEST_WHITE_CORE_STRATEGY = True
     if TEST_WHITE_CORE_STRATEGY:
-        logdir = "./backtest/basic_policy_log_29/"
+        logdir = "./backtest/log_SACAdjRule_3_0_2200/"
     else:
         # TODO:Add code to test your reinforcement learning model
         pass

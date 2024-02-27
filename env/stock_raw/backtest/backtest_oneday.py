@@ -5,9 +5,10 @@ from envs.stock_base_env_cython import StockBaseEnvCython
 from mock_market_common.mock_market_data_cython import MockMarketDataCython
 
 
-def backtest_oneday(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas):
+def backtest_oneday(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas, envs):
     mock_market_data = MockMarketDataCython(df)
     environment = StockBaseEnvCython(date, code_list, mock_market_data)
+    envs.append(environment)
     obs, done, info = environment.reset()
     while True:
 
@@ -41,6 +42,7 @@ def backtest_oneday(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_
             obs, done, info = environment.reset()
 
         if done == 1:
+            print(f"Backtest completed for date: {date}")
             # done == 1 indicates the completion of trading for all stocks on that day.
             break
 
