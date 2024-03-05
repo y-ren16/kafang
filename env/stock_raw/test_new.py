@@ -59,7 +59,6 @@ def backtest(logdir, TEST_WHITE_CORE_STRATEGY):
             df = np.array(df)
             # 为每个任务添加一组参数
             tasks.append((date, df, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas))
-
         max_parallel = 3
 
         # 使用Pool简化并行执行
@@ -82,7 +81,7 @@ if __name__ == "__main__":
     print('Start backtesting...')
     TEST_WHITE_CORE_STRATEGY = True
     if TEST_WHITE_CORE_STRATEGY:
-        logdir = "./backtest/basic_policy_log_29/"
+        logdir = "./backtest/basic_policy_log_ensemble/"
     else:
         # TODO:Add code to test your reinforcement learning model
         pass

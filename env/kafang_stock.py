@@ -40,6 +40,7 @@ class KaFangStock(Game):
             self.dateList.sort()
         else:
             self.dateList = dataList
+        self.dateList = self.dateList[15:]
         # self.dateList = ['20200102', '20200103']
         self.init_info = ''
         self.done = False
@@ -147,7 +148,7 @@ class KaFangStock(Game):
         elif isinstance(volume, float):
             volume = volume
         else:
-            assert False
+            assert False, volume
             # volume = self.get_single_action_space(0)[1].sample()
 
         if isinstance(price, list):
