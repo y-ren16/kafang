@@ -60,7 +60,7 @@ def backtest(logdir, TEST_WHITE_CORE_STRATEGY):
             # 为每个任务添加一组参数
             tasks.append((date, df, code_list, logdir, backtest_mode, TEST_WHITE_CORE_STRATEGY, backtest_datas, envs))
 
-        max_parallel = 6
+        max_parallel = 3
 
         # 使用Pool简化并行执行
         with Pool(max_parallel) as pool:

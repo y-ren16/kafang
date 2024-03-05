@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from RL_train.basicSACTrainer import basicSACMarketmakingTrainer
+from basicSACTrainer import basicSACMarketmakingTrainer
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter
 import os
@@ -101,15 +101,15 @@ class ObservesCollect:
 class MarketmakingTrainer(basicSACMarketmakingTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device,
-                 max_cache_len, action_coefficient=0.0005,
-                 state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4')):
-        action_dim = 1  # 动作空间为股票估值
+                 max_cache_len, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4'),
+                 action_threshold=0.8):
+        action_dim = 3
         self.observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
         self.test_observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
         self.state_keys = state_keys
         self.max_cache_len = max_cache_len
+        self.action_threshold = action_threshold
 
-        self.action_coefficient = action_coefficient
 
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device)
@@ -149,29 +149,61 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             observation = observation[0]
         if 'observation' in observation.keys():
             observation = observation['observation']
-        bid_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * self.action_coefficient + 1) / (1 + 0.00007 + 0.00001)  # 计划买入价
-        ask_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * self.action_coefficient + 1) * (1 + 0.00007 + 0.00001)  # 计划卖出价
-        # 仅考虑以bp0价位卖出，不考虑bp1、bp2、bp3、bp4
-        if ask_price <= observation[f'bp0']:
-            ask_volume = observation[f'bv0']
-            ask_price = observation[f'bp0']
+
+        obs = observation
+        if obs['signal0'] > self.action_threshold:
+            # Long opening
+            price = (obs['ap0'] + obs['bp0']) / 2 * (1 + (obs['signal0'] * 0.0002 * action[0] + obs['signal1'] * 0.0002 * action[1] + obs['signal2'] * 0.0002 * action[2]))
+            if obs['ap0'] <= price:
+                side = [1, 0, 0]
+                volumn = min(obs['av0'], 300. - obs['code_net_position'])
+                price = obs['ap0']
+            else:
+                side = [0, 1, 0]
+                volumn = 0.
+                price = 0.
+        elif obs['signal0'] < -self.action_threshold:
+
+            # Short opening
+            price = (obs['ap0'] + obs['bp0']) / 2 * (1 + (obs['signal0'] * 0.0002 * action[0] + obs['signal1'] * 0.0002 * action[1] + obs['signal2'] * 0.0002 * action[2]))
+            if obs['bp0'] >= price:
+                side = [0, 0, 1]
+                volumn = min(obs['bv0'], 300. + obs['code_net_position'])
+                price = obs['bp0']
+            else:
+                side = [0, 1, 0]
+                volumn = 0.
+                price = 0.
         else:
-            ask_volume = 0
-        ask_volume = min(ask_volume, 300 + observation['code_net_position'], 20)
-        if ask_volume > 0:
-            return [[0, 0, 1], float(ask_volume), ask_price]  # 以ask_price价格卖出ask_volume手
+            side = [0, 1, 0]
+            volumn = 0.
+            price = 0.
+
+        return [side, [volumn], [price]]
+
+        # bid_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) # / (1 + 0.00007 + 0.00001)  # 计划买入价
+        # ask_price = (observation['bp0'] + observation['ap0']) / 2 * (action[0] * 0.0005 + 1) # * (1 + 0.00007 + 0.00001)  # 计划卖出价
+        # # 仅考虑以bp0价位卖出，不考虑bp1、bp2、bp3、bp4
+        # if ask_price <= observation[f'bp0']:
+        #     ask_volume = observation[f'bv0']
+        #     ask_price = observation[f'bp0']
+        # else:
+        #     ask_volume = 0
+        # ask_volume = min(ask_volume, 300 + observation['code_net_position'], 20)
+        # if ask_volume > 0:
+        #     return [[0, 0, 1], float(ask_volume), ask_price]  # 以ask_price价格卖出ask_volume手
 
 
-        if bid_price >= observation[f'ap0']:
-            bid_volume = observation[f'av0']
-            bid_price = observation[f'ap0']
-        else:
-            bid_volume = 0
-        bid_volume = min(bid_volume, 300 - observation['code_net_position'], 20)
-        if bid_volume > 0:
-            return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
+        # if bid_price >= observation[f'ap0']:
+        #     bid_volume = observation[f'av0']
+        #     bid_price = observation[f'ap0']
+        # else:
+        #     bid_volume = 0
+        # bid_volume = min(bid_volume, 300 - observation['code_net_position'], 20)
+        # if bid_volume > 0:
+        #     return [[1, 0, 0], float(bid_volume), bid_price]  # 以bid_price价格买入bid_volume手
 
-        return [[0, 1, 0], 0., 0.]  # 什么都不做
+        # return [[0, 1, 0], 0., 0.]  # 什么都不做
 
     def imitate_step(self, batch_size):
         state, _, _, _, _ = self.replay_buffer.sample(min(batch_size, len(self.replay_buffer)))
@@ -181,7 +213,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             target_action = 0.2 * signal0 * (abs(signal0) > 0.8)
 
         action_mean, action_log_std = self.actor(state)
-        expected_new_q_value = torch.min(self.critic(state, action_mean), dim=0)[0]
+
         imitate_loss = F.mse_loss(action_mean, target_action)
 
         self.actor_optimizer.zero_grad()
@@ -189,12 +221,11 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         self.actor_optimizer.step()
 
         logger = {
-            'actor_loss': imitate_loss.item(),
-            'expected_new_q_value': expected_new_q_value.mean().item()
+            'actor_loss': imitate_loss.item()
         }
         return logger
 
-    def RL_train(self, save_dir, rl_step, imitate_step, batch_size, sample_num=100):
+    def RL_train(self, save_dir, rl_step, imitate_step, batch_size, sample_num=1):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
         if not os.path.exists(os.path.join(save_dir, 'models')):
@@ -213,13 +244,13 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
                 next_state = self.observes_collect.extract_state(all_observes)
                 self.replay_buffer.push(state, action, reward, next_state, done)
-                if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
-                    self.observes_collect.clear()
-                if self.env.done:
-                    all_observes = self.env.reset()
-                    state = self.observes_collect.extract_state(all_observes)
-                else:
-                    state = next_state
+            if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
+                self.observes_collect.clear()
+            if self.env.done:
+                all_observes = self.env.reset()
+                state = self.observes_collect.extract_state(all_observes)
+            else:
+                state = next_state
 
             logger = {}
             logger.update(self.critic_train_step(batch_size))
@@ -228,8 +259,6 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 logger.update(self.imitate_step(batch_size))
             else:
                 logger.update(self.actor_train_step(batch_size))
-            if i == 0:
-                torch.save(self.replay_buffer, os.path.join(save_dir, 'models', 'replay_buffer_0k.pt'))
             if i % 10000 == 0:
                 logger['test_reward_mean'] = self.RL_test(test_length=10000)
 
@@ -272,20 +301,19 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
-                        default='/data/lhdata/kafang/SAC_test')
+                        default='/devdata1/lhdata/kafang/SAC/win1')
     parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
-    parser.add_argument("--imitate-step", type=float, help="steps for RL", default=5e5)
+    parser.add_argument("--imitate-step", type=float, help="steps for RL", default=0)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
                         default=512)
     parser.add_argument("--actor-mlp-hidden-size", type=int, help="number of hidden units per layer in actor",
                         default=512)
-    parser.add_argument("--sample-num", type=int, help="number of sample step", default=10)
-    parser.add_argument("--batch-size", type=int, help="number of samples per minibatch", default=1024)
+    parser.add_argument("--batch-size", type=int, help="number of samples per minibatch", default=256)
     parser.add_argument("--replay-buffer-capacity", type=int, help="replay buffer size", default=1e6)
     parser.add_argument("--critic-lr", type=float, help="learning rate of critic", default=3e-4)
     parser.add_argument("--actor-lr", type=float, help="learning rate of actor", default=1e-4)
     parser.add_argument("--alpha-lr", type=float, help="learning rate of alpha", default=1e-4)
-    parser.add_argument("--log-alpha", type=float, help="initial alpha", default=np.log(0.0001))
+    parser.add_argument("--log-alpha", type=float, help="initial alpha", default=0.0)
     parser.add_argument("--target-entropy", type=float, help="target entropy in SAC", default=None)
     parser.add_argument("--soft-tau", type=float, default=0.005)
     parser.add_argument("--gamma", type=float, default=0.99)
@@ -293,8 +321,8 @@ if __name__ == '__main__':
     parser.add_argument("--state-keys", type=list, default=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4'))
     parser.add_argument("--SRR", type=bool, default=False)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--action-coefficient", type=float, default=0.0005)
-
+    parser.add_argument("--action-threshold", type=float, default=0.8)
+    parser.add_argument("--sample-num", type=int, help="number of sample step", default=5)
 
     args = parser.parse_args()
     if not os.path.exists(args.save_dir):
@@ -327,10 +355,10 @@ if __name__ == '__main__':
                                   env=env,
                                   test_env=test_env,
                                   replay_buffer_capacity=args.replay_buffer_capacity,
-                                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                                  device=torch.device("cpu"),
                                   max_cache_len=args.max_cache_len,
-                                  action_coefficient=args.action_coefficient,
-                                  state_keys=args.state_keys
+                                  state_keys=args.state_keys,
+                                  action_threshold=args.action_threshold
                                   # device=torch.device("cpu")
                                   )
 

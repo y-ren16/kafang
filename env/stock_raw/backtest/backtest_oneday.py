@@ -27,13 +27,12 @@ def backtest_oneday(df, date, code_list, logdir, backtest_mode, TEST_WHITE_CORE_
                     order = Order(side=0, volume=min(
                         1, obs['av0']), price=obs['ap0'] + 0.1)
                 else:
-                    order = Order(side=1, volume=0, price=0)
+                    order = Order(side=1, volume=0., price=0.)
         else:
             # order = base_taker_policy(obs, info)
             order = rl_policy(obs, info)
             # if order.side != 1:
             #     print(order)
-
         obs, done, info = environment.step(order)
 
         if done == 2:

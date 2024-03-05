@@ -1,6 +1,9 @@
 import torch
 from torch import optim
-from RL_train.network import MultiQNetwork, GaussianPolicyNetwork, ReplayBuffer
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from network import MultiQNetwork, GaussianPolicyNetwork, ReplayBuffer
 import copy
 import torch.nn.functional as F
 import numpy as np
@@ -83,8 +86,7 @@ class basicSACMarketmakingTrainer:
         critic_loss.backward()
         self.critic_optimizer.step()
         logger = {
-            'critic_loss': critic_loss.item(),
-            'reward': reward.mean().item()
+            'critic_loss': critic_loss.item()
         }
         return logger
 
