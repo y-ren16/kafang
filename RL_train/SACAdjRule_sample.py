@@ -7,6 +7,8 @@ import os
 import random
 from collections import deque
 import torch.nn.functional as F
+from env.stock_raw.backtest.utils import ParquetFile
+
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -113,6 +115,21 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
 
         super().__init__(state_dim, action_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device)
+
+        self.train_data = []
+        stock_path = "../env/stock_raw"
+        signal_file_original_rootpath = os.path.join(stock_path, 'data')
+        dateList = [name for name in os.listdir(signal_file_original_rootpath) if
+                    os.path.isdir(os.path.join(signal_file_original_rootpath, name))]
+        for date in dateList[:]:
+            file = ParquetFile()
+            file.filename = os.path.join(stock_path, "./data/" + date + '/train_data.parquet')
+            file.load()
+            df_ori = file.data
+            code_list = df_ori['code'].unique()
+            for code in code_list:
+                df = df_ori[df_ori['code'] == code]
+                self.train_data.append(df)
 
     def extract_state(self, all_observes) -> np.ndarray:
         """
@@ -225,6 +242,22 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         }
         return logger
 
+    def roll_out(self, sample_num):
+        for _ in range(sample_num):
+            action = self.actor.get_action(state=torch.FloatTensor(state).to(self.device))
+            decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
+            all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
+            next_state = self.observes_collect.extract_state(all_observes)
+            self.replay_buffer.push(state, action, reward, next_state, done)
+        if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
+            self.observes_collect.clear()
+        if self.env.done:
+            all_observes = self.env.reset()
+            state = self.observes_collect.extract_state(all_observes)
+        else:
+            state = next_state
+        return
+
     def RL_train(self, save_dir, rl_step, imitate_step, batch_size, sample_num=1):
         if not os.path.exists(os.path.join(save_dir, 'log')):
             os.makedirs(os.path.join(save_dir, 'log'))
@@ -238,19 +271,7 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
         state = self.observes_collect.extract_state(all_observes)
 
         for i in range(-int(imitate_step), int(rl_step) + 1):
-            for _ in range(sample_num):
-                action = self.actor.get_action(state=torch.FloatTensor(state).to(self.device))
-                decoupled_action = self.decouple_action(action=action, observation=all_observes[0])
-                all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
-                next_state = self.observes_collect.extract_state(all_observes)
-                self.replay_buffer.push(state, action, reward, next_state, done)
-            if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
-                self.observes_collect.clear()
-            if self.env.done:
-                all_observes = self.env.reset()
-                state = self.observes_collect.extract_state(all_observes)
-            else:
-                state = next_state
+            self.roll_out(sample_num)
 
             logger = {}
             logger.update(self.critic_train_step(batch_size))
@@ -305,9 +326,9 @@ if __name__ == '__main__':
     parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
     parser.add_argument("--imitate-step", type=float, help="steps for RL", default=0)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
-                        default=512)
+                        default=256)
     parser.add_argument("--actor-mlp-hidden-size", type=int, help="number of hidden units per layer in actor",
-                        default=512)
+                        default=256)
     parser.add_argument("--batch-size", type=int, help="number of samples per minibatch", default=1024)
     parser.add_argument("--replay-buffer-capacity", type=int, help="replay buffer size", default=1e6)
     parser.add_argument("--critic-lr", type=float, help="learning rate of critic", default=3e-4)
@@ -352,7 +373,7 @@ if __name__ == '__main__':
                                   target_entropy=args.target_entropy,
                                   gamma=args.gamma,
                                   soft_tau=args.soft_tau,
-                                  env=env,
+                                  env=None,
                                   test_env=test_env,
                                   replay_buffer_capacity=args.replay_buffer_capacity,
                                   device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),

@@ -8,7 +8,7 @@ import env
 import os
 
 
-def make(env_type, seed=None, conf=None):
+def make(env_type, seed=None, conf=None, dateList=None):
     file_path = os.path.join(os.path.dirname(__file__), 'config1.json')
     if not conf:
         with open(file_path) as f:
@@ -17,7 +17,7 @@ def make(env_type, seed=None, conf=None):
     if env_type.split('-')[0] in ["olympics"]:
         return getattr(env, class_literal)(conf, seed)
     else:
-        return getattr(env, class_literal)(conf)
+        return getattr(env, class_literal)(conf=conf, dateList=dateList)
 
 
 if __name__ == "__main__":

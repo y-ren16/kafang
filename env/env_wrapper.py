@@ -4,8 +4,8 @@ import numpy as np
 
 
 class env_with_reward(KaFangStock):
-    def __init__(self, conf, seed=None, dataList=None):
-        super(env_with_reward, self).__init__(conf, seed, dataList)
+    def __init__(self, conf, seed=None, dateList=None):
+        super(env_with_reward, self).__init__(conf, seed, dateList)
         self.conf = conf
         self.seed = seed
         self.info_his = []
@@ -95,8 +95,8 @@ class env_with_reward(KaFangStock):
 
 
 class env_with_pnl_reward(env_with_reward, ABC):
-    def __init__(self, conf, seed=None):
-        super(env_with_pnl_reward, self).__init__(conf, seed)
+    def __init__(self, conf, seed=None, dateList=None):
+        super(env_with_pnl_reward, self).__init__(conf, seed, dateList)
 
     def compute_reward(self):
         # code_pnl的计算方式如下：code_positional_pnl+code_cash_pnl-code_handling_fee

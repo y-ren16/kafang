@@ -26,7 +26,7 @@ from .simulators.game import Game
 
 
 class KaFangStock(Game):
-    def __init__(self, conf, seed=None, dataList=None):
+    def __init__(self, conf, seed=None, dateList=None):
         super(KaFangStock, self).__init__(conf['n_player'], conf['is_obs_continuous'], conf['is_act_continuous'],
                                                conf['game_name'], conf['agent_nums'], conf['obs_type'])
         self.seed = seed
@@ -34,13 +34,13 @@ class KaFangStock(Game):
 
         self.signal_file_original_rootpath = os.path.join(stock_path, 'data')
 
-        if dataList is None:
+        if dateList is None:
             self.dateList = [name for name in os.listdir(self.signal_file_original_rootpath) if
                         os.path.isdir(os.path.join(self.signal_file_original_rootpath, name))]
             self.dateList.sort()
         else:
-            self.dateList = dataList
-        self.dateList = self.dateList[15:]
+            self.dateList = dateList
+        # self.dateList = self.dateList[15:]
         # self.dateList = ['20200102', '20200103']
         self.init_info = ''
         self.done = False
