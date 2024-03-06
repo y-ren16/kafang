@@ -205,6 +205,7 @@ def train_func_per_worker(config: Dict):
     batch_size = config['batch_size']
     sample_num = config['sample_num']
     replay_buffer_capacity = config['replay_buffer_capacity']
+    save_dir = os.path.join(save_dir, str(torch.distributed.get_rank()))
     # date_list = config['date_list']
     for date_list in ray.train.get_dataset_shard("dateList").iter_batches():
         date_list = date_list['item'].tolist()
@@ -355,16 +356,16 @@ def train_func_per_worker(config: Dict):
                        os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
 
 
-def main(num_workers=2, use_gpu=True):
+def main():
     train_config = {
                     "SRR": False,
                     "action_threshold": 0.8,
                     "action_dim": 3,
-                    "actor_lr": 0.0001,
+                    "actor_lr": 0.00001,
                     "actor_mlp_hidden_size": 256,
-                    "alpha_lr": 0.0001,
+                    "alpha_lr": 0.00001,
                     "batch_size": 1024,
-                    "critic_lr": 0.0003,
+                    "critic_lr": 0.00003,
                     "critic_mlp_hidden_size": 256,
                     "gamma": 0.99,
                     "imitate_step": 0,
@@ -373,7 +374,7 @@ def main(num_workers=2, use_gpu=True):
                     "replay_buffer_capacity": 1000000.0,
                     "rl_step": 100000000.0,
                     "sample_num": 5,
-                    "save_dir": "/data/lhdata/kafang/output_SAC_rule2/test",
+                    "save_dir": "./output/output_SAC_rule2_lr4",
                     "seed": 1,
                     "soft_tau": 0.005,
                     "state_keys": [
@@ -404,7 +405,17 @@ def main(num_workers=2, use_gpu=True):
     dateList = from_items(dateList)
 
     # Configure computation resources
-    scaling_config = ScalingConfig(num_workers=num_workers, use_gpu=use_gpu)
+    # scaling_config = ScalingConfig(num_workers=num_workers, use_gpu=use_gpu)
+
+    scaling_config = ScalingConfig(
+        num_workers=5,  # 启动15个工作节点
+        use_gpu=True,  # 使用GPU
+        resources_per_worker={
+            "CPU": 1,  # 每个工作节点分配1个CPU
+            "GPU": 1  
+        }
+    )
+
 
     # Initialize a Ray TorchTrainer
     trainer = TorchTrainer(
