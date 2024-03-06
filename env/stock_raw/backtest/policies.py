@@ -1,5 +1,5 @@
 from envs.utils import Order
-from backtest.sac_ensemble.submission import my_controller
+from backtest.sac_rule2.submission import my_controller
 
 
 def base_taker_policy(obs, info):
@@ -33,5 +33,5 @@ def rl_policy(obs, info):
     side, volume, price = my_controller(all_observes, None, False)
     # one hot to int
     side = side.index(1)
-    order = Order(side=side, price=price, volume=volume)
+    order = Order(side=side, price=price[0], volume=volume[0])
     return order

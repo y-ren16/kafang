@@ -81,7 +81,7 @@ if __name__ == "__main__":
     print('Start backtesting...')
     TEST_WHITE_CORE_STRATEGY = True
     if TEST_WHITE_CORE_STRATEGY:
-        logdir = "./backtest/basic_policy_log_ensemble/"
+        logdir = "./backtest/sac_new_policy_log/"
     else:
         # TODO:Add code to test your reinforcement learning model
         pass
