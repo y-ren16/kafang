@@ -1,5 +1,5 @@
 from envs.utils import Order
-from backtest.raw_sac15.submission import my_controller
+from backtest.sac_rule2.submission import my_controller
 
 
 def base_taker_policy(obs, info):

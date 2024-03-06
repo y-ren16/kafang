@@ -18,7 +18,7 @@ from ray.train import ScalingConfig
 from ray.train.torch import TorchTrainer
 from ray.data import from_items
 from pathlib import Path
-
+from ray import train
 
 class NeuralNetworkForSAC(nn.Module):
     def __init__(self, state_dim, action_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha):
@@ -374,7 +374,8 @@ def main():
                     "replay_buffer_capacity": 1000000.0,
                     "rl_step": 100000000.0,
                     "sample_num": 5,
-                    "save_dir": "./output/output_SAC_rule2_lr4",
+                    "save_dir": "/data/lhdata/kafang/output_SAC_rule2/ray",
+                    # "save_dir": "./output/output_SAC_rule2_lr4",
                     "seed": 1,
                     "soft_tau": 0.005,
                     "state_keys": [
