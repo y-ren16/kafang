@@ -49,7 +49,12 @@ class ObservesCollect:
         f_sum_residual_ratio_2 = (ar2 + ar1 + ar0) / (br2 + br1 + br0)
         f_sum_residual_ratio_3 = (ar3 + ar2 + ar1 + ar0) / (br3 + br2 + br1 + br0)
         f_sum_residual_ratio_4 = (ar4 + ar3 + ar2 + ar1 + ar0) / (br4 + br3 + br2 + br1 + br0)
-        return f_sum_residual_ratio_0, f_sum_residual_ratio_1, f_sum_residual_ratio_2, f_sum_residual_ratio_3, f_sum_residual_ratio_4
+        f_sum_residual_ratio_0 = np.array([f_sum_residual_ratio_0])
+        f_sum_residual_ratio_1 = np.array([f_sum_residual_ratio_1])
+        f_sum_residual_ratio_2 = np.array([f_sum_residual_ratio_2])
+        f_sum_residual_ratio_3 = np.array([f_sum_residual_ratio_3])
+        f_sum_residual_ratio_4 = np.array([f_sum_residual_ratio_4])
+        return [f_sum_residual_ratio_0, f_sum_residual_ratio_1, f_sum_residual_ratio_2, f_sum_residual_ratio_3, f_sum_residual_ratio_4]
 
     def extract_state(self, all_observes) -> np.ndarray:
         # import pdb
@@ -103,10 +108,10 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device,
                  max_cache_len, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4'),
-                 action_threshold=0.8):
+                 action_threshold=0.8, SRR=False):
         action_dim = 3
-        self.observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
-        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
+        self.observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys, SRR=SRR)
+        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys, SRR=SRR)
         self.state_keys = state_keys
         self.max_cache_len = max_cache_len
         self.action_threshold = action_threshold
@@ -261,6 +266,8 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             else:
                 logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
+                # if i%100000 == 0:
+                #     logger['test_reward_mean'] = self.RL_test(test_length=100000)
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
                 self.save_RL_part(os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
@@ -337,29 +344,31 @@ if __name__ == '__main__':
         # cache_single_dim += 5
         basic_state_dim += 5
     state_dim = args.max_cache_len * cache_single_dim + basic_state_dim
+    print('state_dim:', state_dim)
 
     trainer = MarketmakingTrainer(state_dim=state_dim,
-                                  critic_mlp_hidden_size=args.critic_mlp_hidden_size,
-                                  actor_mlp_hidden_size=args.actor_mlp_hidden_size,
-                                  log_alpha=args.log_alpha,
-                                  critic_lr=args.critic_lr,
-                                  actor_lr=args.actor_lr,
-                                  alpha_lr=args.alpha_lr,
-                                  target_entropy=args.target_entropy,
-                                  gamma=args.gamma,
-                                  soft_tau=args.soft_tau,
-                                  env=env,
-                                  test_env=test_env,
-                                  replay_buffer_capacity=args.replay_buffer_capacity,
-                                  device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-                                  max_cache_len=args.max_cache_len,
-                                  state_keys=args.state_keys,
-                                  action_threshold=args.action_threshold
-                                  )
+                                critic_mlp_hidden_size=args.critic_mlp_hidden_size,
+                                actor_mlp_hidden_size=args.actor_mlp_hidden_size,
+                                log_alpha=args.log_alpha,
+                                critic_lr=args.critic_lr,
+                                actor_lr=args.actor_lr,
+                                alpha_lr=args.alpha_lr,
+                                target_entropy=args.target_entropy,
+                                gamma=args.gamma,
+                                soft_tau=args.soft_tau,
+                                env=env,
+                                test_env=test_env,
+                                replay_buffer_capacity=args.replay_buffer_capacity,
+                                device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                                max_cache_len=args.max_cache_len,
+                                state_keys=args.state_keys,
+                                action_threshold=args.action_threshold,
+                                SRR=args.SRR
+                                )
 
     trainer.RL_train(save_dir=args.save_dir,
-                     rl_step=args.rl_step,
-                     imitate_step=args.imitate_step,
-                     batch_size=args.batch_size,
-                     sample_num=args.sample_num
-                     )
+                    rl_step=args.rl_step,
+                    imitate_step=args.imitate_step,
+                    batch_size=args.batch_size,
+                    sample_num=args.sample_num
+                    )

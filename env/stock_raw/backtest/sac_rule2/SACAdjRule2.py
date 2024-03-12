@@ -49,7 +49,12 @@ class ObservesCollect:
         f_sum_residual_ratio_2 = (ar2 + ar1 + ar0) / (br2 + br1 + br0)
         f_sum_residual_ratio_3 = (ar3 + ar2 + ar1 + ar0) / (br3 + br2 + br1 + br0)
         f_sum_residual_ratio_4 = (ar4 + ar3 + ar2 + ar1 + ar0) / (br4 + br3 + br2 + br1 + br0)
-        return f_sum_residual_ratio_0, f_sum_residual_ratio_1, f_sum_residual_ratio_2, f_sum_residual_ratio_3, f_sum_residual_ratio_4
+        f_sum_residual_ratio_0 = np.array([f_sum_residual_ratio_0])
+        f_sum_residual_ratio_1 = np.array([f_sum_residual_ratio_1])
+        f_sum_residual_ratio_2 = np.array([f_sum_residual_ratio_2])
+        f_sum_residual_ratio_3 = np.array([f_sum_residual_ratio_3])
+        f_sum_residual_ratio_4 = np.array([f_sum_residual_ratio_4])
+        return [f_sum_residual_ratio_0, f_sum_residual_ratio_1, f_sum_residual_ratio_2, f_sum_residual_ratio_3, f_sum_residual_ratio_4]
 
     def extract_state(self, all_observes) -> np.ndarray:
         # import pdb
@@ -81,14 +86,15 @@ class ObservesCollect:
             all_observes['code_cash_pnl'] / position / all_observes['ap0_t0']) if position != 0 else np.array([10])
         state.append(cost)
         if self.SRR:
-            fsrr_history = []
-            for i in range(0, self.cache.maxlen):
-                if i == self.cache.maxlen - 1:
-                    fsrr_list = self.calculate_sum_residual_ratio(all_observes)
-                    fsrr_history += fsrr_list
-                else:
-                    fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
-            state += fsrr_history
+            state += self.calculate_sum_residual_ratio(all_observes)
+            # fsrr_history = []
+            # for i in range(0, self.cache.maxlen):
+            #     if i == self.cache.maxlen - 1:
+            #         fsrr_list = self.calculate_sum_residual_ratio(all_observes)
+            #         fsrr_history += fsrr_list
+            #     else:
+            #         fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
+            # state += fsrr_history
 
         state = np.concatenate(state, axis=0)
         # print(state)
@@ -102,10 +108,10 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
     def __init__(self, state_dim, critic_mlp_hidden_size, actor_mlp_hidden_size, log_alpha, critic_lr, actor_lr,
                  alpha_lr, target_entropy, gamma, soft_tau, env, test_env, replay_buffer_capacity, device,
                  max_cache_len, state_keys=('signal0', 'signal1', 'signal2', 'ap0', 'bp0', 'ap1', 'bp1', 'ap2', 'bp2', 'ap3', 'bp3', 'ap4', 'bp4'),
-                 action_threshold=0.8):
+                 action_threshold=0.8, SRR=False):
         action_dim = 3
-        self.observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
-        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys)
+        self.observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys, SRR=SRR)
+        self.test_observes_collect = ObservesCollect(maxlen=max_cache_len, keys=state_keys, SRR=SRR)
         self.state_keys = state_keys
         self.max_cache_len = max_cache_len
         self.action_threshold = action_threshold
@@ -244,13 +250,13 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
                 next_state = self.observes_collect.extract_state(all_observes)
                 self.replay_buffer.push(state, action, reward, next_state, done)
-            if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
-                self.observes_collect.clear()
-            if self.env.done:
-                all_observes = self.env.reset()
-                state = self.observes_collect.extract_state(all_observes)
-            else:
-                state = next_state
+                if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
+                    self.observes_collect.clear()
+                if self.env.done:
+                    all_observes = self.env.reset()
+                    state = self.observes_collect.extract_state(all_observes)
+                else:
+                    state = next_state
 
             logger = {}
             logger.update(self.critic_train_step(batch_size))
@@ -260,13 +266,12 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             else:
                 logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
-                logger['test_reward_mean'] = self.RL_test(test_length=10000)
-
+                if i%100000 == 0:
+                    logger['test_reward_mean'] = self.RL_test(test_length=100000)
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
                 self.save_RL_part(os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
                 info = 'step: %dk' % (i / 1000)
-                # info = 'step: %d' % (i)
                 for key in logger.keys():
                     info += ' | %s: %.3f' % (key, logger[key])
                 print(info)
@@ -289,8 +294,6 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 self.test_observes_collect.clear()
             if self.test_env.done:
                 self.test_env.reset()
-            # state = next_state
-
         return reward_sum
 
 
@@ -301,14 +304,14 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
-                        default='/devdata1/lhdata/kafang/SAC/win1')
-    parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
+                        default='/data/lhdata/kafang/SAC/win1')
+    parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e6)
     parser.add_argument("--imitate-step", type=float, help="steps for RL", default=0)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
                         default=512)
     parser.add_argument("--actor-mlp-hidden-size", type=int, help="number of hidden units per layer in actor",
                         default=512)
-    parser.add_argument("--batch-size", type=int, help="number of samples per minibatch", default=256)
+    parser.add_argument("--batch-size", type=int, help="number of samples per minibatch", default=1024)
     parser.add_argument("--replay-buffer-capacity", type=int, help="replay buffer size", default=1e6)
     parser.add_argument("--critic-lr", type=float, help="learning rate of critic", default=3e-4)
     parser.add_argument("--actor-lr", type=float, help="learning rate of actor", default=1e-4)
@@ -338,33 +341,34 @@ if __name__ == '__main__':
     cache_single_dim = len(args.state_keys)
     basic_state_dim = 2
     if args.SRR:
-        cache_single_dim += 5
-        basic_state_dim += 1
+        # cache_single_dim += 5
+        basic_state_dim += 5
     state_dim = args.max_cache_len * cache_single_dim + basic_state_dim
+    print('state_dim:', state_dim)
 
     trainer = MarketmakingTrainer(state_dim=state_dim,
-                                  critic_mlp_hidden_size=args.critic_mlp_hidden_size,
-                                  actor_mlp_hidden_size=args.actor_mlp_hidden_size,
-                                  log_alpha=args.log_alpha,
-                                  critic_lr=args.critic_lr,
-                                  actor_lr=args.actor_lr,
-                                  alpha_lr=args.alpha_lr,
-                                  target_entropy=args.target_entropy,
-                                  gamma=args.gamma,
-                                  soft_tau=args.soft_tau,
-                                  env=env,
-                                  test_env=test_env,
-                                  replay_buffer_capacity=args.replay_buffer_capacity,
-                                  device=torch.device("cpu"),
-                                  max_cache_len=args.max_cache_len,
-                                  state_keys=args.state_keys,
-                                  action_threshold=args.action_threshold
-                                  # device=torch.device("cpu")
-                                  )
+                                critic_mlp_hidden_size=args.critic_mlp_hidden_size,
+                                actor_mlp_hidden_size=args.actor_mlp_hidden_size,
+                                log_alpha=args.log_alpha,
+                                critic_lr=args.critic_lr,
+                                actor_lr=args.actor_lr,
+                                alpha_lr=args.alpha_lr,
+                                target_entropy=args.target_entropy,
+                                gamma=args.gamma,
+                                soft_tau=args.soft_tau,
+                                env=env,
+                                test_env=test_env,
+                                replay_buffer_capacity=args.replay_buffer_capacity,
+                                device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                                max_cache_len=args.max_cache_len,
+                                state_keys=args.state_keys,
+                                action_threshold=args.action_threshold,
+                                SRR=args.SRR
+                                )
 
     trainer.RL_train(save_dir=args.save_dir,
-                     rl_step=args.rl_step,
-                     imitate_step=args.imitate_step,
-                     batch_size=args.batch_size,
-                     sample_num=args.sample_num
-                     )
+                    rl_step=args.rl_step,
+                    imitate_step=args.imitate_step,
+                    batch_size=args.batch_size,
+                    sample_num=args.sample_num
+                    )
