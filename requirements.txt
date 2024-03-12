@@ -6,3 +6,5 @@ gym==0.18.3
 dill==0.3.7
 pyarrow==12.0.1
 torch==1.13.1
+tqdm==4.66.2
+tensorboard==2.11.2

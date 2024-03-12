@@ -81,14 +81,15 @@ class ObservesCollect:
             all_observes['code_cash_pnl'] / position / all_observes['ap0_t0']) if position != 0 else np.array([10])
         state.append(cost)
         if self.SRR:
-            fsrr_history = []
-            for i in range(0, self.cache.maxlen):
-                if i == self.cache.maxlen - 1:
-                    fsrr_list = self.calculate_sum_residual_ratio(all_observes)
-                    fsrr_history += fsrr_list
-                else:
-                    fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
-            state += fsrr_history
+            state += self.calculate_sum_residual_ratio(all_observes)
+            # fsrr_history = []
+            # for i in range(0, self.cache.maxlen):
+            #     if i == self.cache.maxlen - 1:
+            #         fsrr_list = self.calculate_sum_residual_ratio(all_observes)
+            #         fsrr_history += fsrr_list
+            #     else:
+            #         fsrr_history.append(self.calculate_sum_residual_ratio(self.cache[i])[0])
+            # state += fsrr_history
 
         state = np.concatenate(state, axis=0)
         # print(state)
@@ -333,8 +334,8 @@ if __name__ == '__main__':
     cache_single_dim = len(args.state_keys)
     basic_state_dim = 2
     if args.SRR:
-        cache_single_dim += 5
-        basic_state_dim += 1
+        # cache_single_dim += 5
+        basic_state_dim += 5
     state_dim = args.max_cache_len * cache_single_dim + basic_state_dim
 
     trainer = MarketmakingTrainer(state_dim=state_dim,
@@ -354,7 +355,6 @@ if __name__ == '__main__':
                                   max_cache_len=args.max_cache_len,
                                   state_keys=args.state_keys,
                                   action_threshold=args.action_threshold
-                                  # device=torch.device("cpu")
                                   )
 
     trainer.RL_train(save_dir=args.save_dir,
