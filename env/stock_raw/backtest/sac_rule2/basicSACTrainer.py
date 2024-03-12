@@ -204,7 +204,7 @@ class basicSACMarketmakingTrainer:
         return
 
     def load_RL_part(self, save_path):
-        payload = torch.load(save_path)
+        payload = torch.load(save_path, map_location=torch.device('cuda'))
         self.actor.load_state_dict(payload['actor'])
         self.critic.load_state_dict(payload['critic'])
         self.target_critic.load_state_dict(payload['target_critic'])

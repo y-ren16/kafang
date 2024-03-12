@@ -244,13 +244,13 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 all_observes, reward, done, info_before, info_after = self.env.step([decoupled_action])
                 next_state = self.observes_collect.extract_state(all_observes)
                 self.replay_buffer.push(state, action, reward, next_state, done)
-            if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
-                self.observes_collect.clear()
-            if self.env.done:
-                all_observes = self.env.reset()
-                state = self.observes_collect.extract_state(all_observes)
-            else:
-                state = next_state
+                if done:  # 如果单只股票/单日/全部数据结束，则重置历史观测数据
+                    self.observes_collect.clear()
+                if self.env.done:
+                    all_observes = self.env.reset()
+                    state = self.observes_collect.extract_state(all_observes)
+                else:
+                    state = next_state
 
             logger = {}
             logger.update(self.critic_train_step(batch_size))
@@ -260,13 +260,10 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             else:
                 logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
-                logger['test_reward_mean'] = self.RL_test(test_length=10000)
-
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
                 self.save_RL_part(os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
                 info = 'step: %dk' % (i / 1000)
-                # info = 'step: %d' % (i)
                 for key in logger.keys():
                     info += ' | %s: %.3f' % (key, logger[key])
                 print(info)
@@ -289,8 +286,6 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
                 self.test_observes_collect.clear()
             if self.test_env.done:
                 self.test_env.reset()
-            # state = next_state
-
         return reward_sum
 
 
@@ -302,7 +297,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
                         default='/data/lhdata/kafang/SAC/win1')
-    parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
+    parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e6)
     parser.add_argument("--imitate-step", type=float, help="steps for RL", default=0)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
                         default=512)
