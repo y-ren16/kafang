@@ -31,7 +31,7 @@ agent1 = MarketmakingTrainer(state_dim=15,
                             action_threshold=.8
                             # device=torch.device("cpu")
                             )
-agent1.load_RL_part(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'RL_part_1100k.pt'))
+agent1.load_RL_part(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'RL_part_1000k.pt'))
 
 
 def my_controller(observation, action_space, is_act_continuous=False):

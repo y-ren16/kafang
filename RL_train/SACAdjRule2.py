@@ -266,8 +266,6 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             else:
                 logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
-                # if i%100000 == 0:
-                #     logger['test_reward_mean'] = self.RL_test(test_length=100000)
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
                 self.save_RL_part(os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
@@ -305,7 +303,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
                         default='/data/lhdata/kafang/SAC/win1')
-    parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
+    parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e6)
     parser.add_argument("--imitate-step", type=float, help="steps for RL", default=0)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
                         default=512)
