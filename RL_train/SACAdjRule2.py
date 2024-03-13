@@ -44,7 +44,7 @@ class ObservesCollect:
         br2 = (mid_price - bp2) * all_observes['bv2']
         br3 = (mid_price - bp3) * all_observes['bv3']
         br4 = (mid_price - bp4) * all_observes['bv4']
-        f_sum_residual_ratio_0 = ar0 / br0
+        f_sum_residual_ratio_0 = (ar0 / br0) if br0 != 0 else 1
         f_sum_residual_ratio_1 = (ar1 + ar0) / (br1 + br0)
         f_sum_residual_ratio_2 = (ar2 + ar1 + ar0) / (br2 + br1 + br0)
         f_sum_residual_ratio_3 = (ar3 + ar2 + ar1 + ar0) / (br3 + br2 + br1 + br0)
@@ -305,7 +305,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-dir", type=str, help="the dir to save log and model",
                         default='/data/lhdata/kafang/SAC/win1')
-    parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e6)
+    parser.add_argument("--rl-step", type=float, help="steps for RL", default=1e8)
     parser.add_argument("--imitate-step", type=float, help="steps for RL", default=0)
     parser.add_argument("--critic-mlp-hidden-size", type=int, help="number of hidden units per layer in critic",
                         default=512)

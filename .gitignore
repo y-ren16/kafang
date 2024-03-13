@@ -1,3 +1,4 @@
 env/stock_raw/data*/
 __pycache__
 output*/
+*.json
