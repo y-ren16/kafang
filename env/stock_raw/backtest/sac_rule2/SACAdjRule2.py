@@ -35,20 +35,20 @@ class ObservesCollect:
         bp4 = all_observes['bp4']
         mid_price = (ap0 + bp0) / 2
         ar0 = (ap0 - mid_price) * all_observes['av0']
-        ar1 = (ap1 - mid_price) * all_observes['av1']
-        ar2 = (ap2 - mid_price) * all_observes['av2']
-        ar3 = (ap3 - mid_price) * all_observes['av3']
-        ar4 = (ap4 - mid_price) * all_observes['av4']
+        ar1 = (ap1 - mid_price) * all_observes['av1'] + ar0
+        ar2 = (ap2 - mid_price) * all_observes['av2'] + ar1
+        ar3 = (ap3 - mid_price) * all_observes['av3'] + ar2
+        ar4 = (ap4 - mid_price) * all_observes['av4'] + ar3
         br0 = (mid_price - bp0) * all_observes['bv0']
-        br1 = (mid_price - bp1) * all_observes['bv1']
-        br2 = (mid_price - bp2) * all_observes['bv2']
-        br3 = (mid_price - bp3) * all_observes['bv3']
-        br4 = (mid_price - bp4) * all_observes['bv4']
-        f_sum_residual_ratio_0 = ar0 / br0
-        f_sum_residual_ratio_1 = (ar1 + ar0) / (br1 + br0)
-        f_sum_residual_ratio_2 = (ar2 + ar1 + ar0) / (br2 + br1 + br0)
-        f_sum_residual_ratio_3 = (ar3 + ar2 + ar1 + ar0) / (br3 + br2 + br1 + br0)
-        f_sum_residual_ratio_4 = (ar4 + ar3 + ar2 + ar1 + ar0) / (br4 + br3 + br2 + br1 + br0)
+        br1 = (mid_price - bp1) * all_observes['bv1'] + br0
+        br2 = (mid_price - bp2) * all_observes['bv2'] + br1
+        br3 = (mid_price - bp3) * all_observes['bv3'] + br2
+        br4 = (mid_price - bp4) * all_observes['bv4'] + br3
+        f_sum_residual_ratio_0 = (ar0 / br0) if br0 != 0 else 1
+        f_sum_residual_ratio_1 = (ar1 / br1) if br1 != 0 else 1
+        f_sum_residual_ratio_2 = (ar2 / br2) if br2 != 0 else 1
+        f_sum_residual_ratio_3 = (ar3 / br3) if br3 != 0 else 1
+        f_sum_residual_ratio_4 = (ar4 / br4) if br4 != 0 else 1
         f_sum_residual_ratio_0 = np.array([f_sum_residual_ratio_0])
         f_sum_residual_ratio_1 = np.array([f_sum_residual_ratio_1])
         f_sum_residual_ratio_2 = np.array([f_sum_residual_ratio_2])
@@ -266,8 +266,6 @@ class MarketmakingTrainer(basicSACMarketmakingTrainer):
             else:
                 logger.update(self.actor_train_step(batch_size))
             if i % 10000 == 0:
-                if i%100000 == 0:
-                    logger['test_reward_mean'] = self.RL_test(test_length=100000)
                 for key in logger.keys():
                     logger_writer.add_scalar(key, logger[key], i)
                 self.save_RL_part(os.path.join(save_dir, 'models', 'RL_part_%dk.pt' % (i / 1000)))
